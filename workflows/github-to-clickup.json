@@ -24,15 +24,29 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://api.clickup.com/api/v2/list/{{ $json.repoListId }}/task?page=0&include_closed=true",
+        "url": "=https://api.clickup.com/api/v2/list/{{ $('Anti-Loop & Parse').item.json.repoListId }}/task?page=0&include_closed=true",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "options": {}
       },
-      "name": "Fetch Repo Tasks",
+      "name": "Fetch Repo P0",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [600, 300],
+      "position": [560, 300],
+      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.clickup.com/api/v2/list/{{ $('Anti-Loop & Parse').item.json.repoListId }}/task?page=1&include_closed=true",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "Fetch Repo P1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
@@ -43,20 +57,62 @@
         "genericAuthType": "httpHeaderAuth",
         "options": {}
       },
-      "name": "Fetch Master Tasks",
+      "name": "Fetch Master P0",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [780, 300],
+      "position": [800, 300],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
       "parameters": {
-        "jsCode": "const data = $('Anti-Loop & Parse').first().json;\nconst repoTasks = $('Fetch Repo Tasks').first().json.tasks || [];\nconst masterTasks = $('Fetch Master Tasks').first().json.tasks || [];\n\nconst namePrefix = `[${data.repoShort}#${data.issueNumber}]`;\n\nlet repoTaskId = null;\nlet masterTaskId = null;\n\nfor (const t of repoTasks) {\n  if (t.name && t.name.startsWith(namePrefix)) {\n    repoTaskId = t.id;\n    break;\n  }\n}\nfor (const t of masterTasks) {\n  if (t.name && t.name.startsWith(namePrefix)) {\n    masterTaskId = t.id;\n    break;\n  }\n}\n\nreturn [{ json: { ...data, repoTaskId, masterTaskId } }];\n"
+        "method": "GET",
+        "url": "https://api.clickup.com/api/v2/list/901710789811/task?page=1&include_closed=true",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "Fetch Master P1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [920, 300],
+      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.clickup.com/api/v2/list/901710789811/task?page=2&include_closed=true",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "Fetch Master P2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1040, 300],
+      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.clickup.com/api/v2/list/901710789811/task?page=3&include_closed=true",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "Fetch Master P3",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1160, 300],
+      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('Anti-Loop & Parse').first().json;\nconst repoTasks = [\n  ...($('Fetch Repo P0').first().json.tasks || []),\n  ...($('Fetch Repo P1').first().json.tasks || [])\n];\nconst masterTasks = [\n  ...($('Fetch Master P0').first().json.tasks || []),\n  ...($('Fetch Master P1').first().json.tasks || []),\n  ...($('Fetch Master P2').first().json.tasks || []),\n  ...($('Fetch Master P3').first().json.tasks || [])\n];\n\nconst namePrefix = `[${data.repoShort}#${data.issueNumber}]`;\nlet repoTaskId = null;\nlet masterTaskId = null;\n\nfor (const t of repoTasks) {\n  if (t.name && t.name.startsWith(namePrefix)) {\n    repoTaskId = t.id;\n    break;\n  }\n}\nfor (const t of masterTasks) {\n  if (t.name && t.name.startsWith(namePrefix)) {\n    masterTaskId = t.id;\n    break;\n  }\n}\n\nreturn [{ json: { ...data, repoTaskId, masterTaskId } }];\n"
       },
       "name": "Resolve Task IDs",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [900, 300]
+      "position": [1280, 300]
     },
     {
       "parameters": {
@@ -78,7 +134,7 @@
       "name": "Route by Action",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 2,
-      "position": [1080, 300]
+      "position": [1460, 300]
     },
     {
       "parameters": {
@@ -87,7 +143,7 @@
       "name": "Prepare Create",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1320, 60]
+      "position": [1800, 60]
     },
     {
       "parameters": {
@@ -103,7 +159,7 @@
       "name": "Create Repo Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1560, 0],
+      "position": [2040, 0],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
@@ -120,7 +176,7 @@
       "name": "Create Master Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1800, 0],
+      "position": [2280, 0],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
@@ -130,7 +186,7 @@
       "name": "Prepare Close",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1320, 260]
+      "position": [1800, 260]
     },
     {
       "parameters": {
@@ -146,7 +202,7 @@
       "name": "Close Repo Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1560, 240],
+      "position": [2040, 240],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
@@ -163,7 +219,7 @@
       "name": "Close Master Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1800, 260],
+      "position": [2280, 260],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
@@ -173,7 +229,7 @@
       "name": "Prepare Reopen",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1320, 440]
+      "position": [1800, 440]
     },
     {
       "parameters": {
@@ -189,7 +245,7 @@
       "name": "Reopen Repo Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1560, 420],
+      "position": [2040, 420],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
@@ -206,7 +262,7 @@
       "name": "Reopen Master Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1800, 440],
+      "position": [2280, 440],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
@@ -216,7 +272,7 @@
       "name": "Prepare Label Update",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1320, 620]
+      "position": [1800, 620]
     },
     {
       "parameters": {
@@ -232,7 +288,7 @@
       "name": "Update Repo Status",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1560, 600],
+      "position": [2040, 600],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
@@ -249,7 +305,7 @@
       "name": "Update Master Status",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1800, 620],
+      "position": [2280, 620],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
@@ -259,7 +315,7 @@
       "name": "Prepare Comment",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1320, 800]
+      "position": [1800, 800]
     },
     {
       "parameters": {
@@ -275,7 +331,7 @@
       "name": "Comment Repo Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1560, 780],
+      "position": [2040, 780],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
@@ -292,7 +348,7 @@
       "name": "Comment Master Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1800, 800],
+      "position": [2280, 800],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
@@ -302,7 +358,7 @@
       "name": "Prepare Assignee Update",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1320, 980]
+      "position": [1800, 980]
     },
     {
       "parameters": {
@@ -318,7 +374,7 @@
       "name": "Update Repo Assignees",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1560, 960],
+      "position": [2040, 960],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
@@ -335,7 +391,7 @@
       "name": "Update Master Assignees",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1800, 980],
+      "position": [2280, 980],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     }
   ],
@@ -344,12 +400,24 @@
       "main": [[{ "node": "Anti-Loop & Parse", "type": "main", "index": 0 }]]
     },
     "Anti-Loop & Parse": {
-      "main": [[{ "node": "Fetch Repo Tasks", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Fetch Repo P0", "type": "main", "index": 0 }]]
     },
-    "Fetch Repo Tasks": {
-      "main": [[{ "node": "Fetch Master Tasks", "type": "main", "index": 0 }]]
+    "Fetch Repo P0": {
+      "main": [[{ "node": "Fetch Repo P1", "type": "main", "index": 0 }]]
     },
-    "Fetch Master Tasks": {
+    "Fetch Repo P1": {
+      "main": [[{ "node": "Fetch Master P0", "type": "main", "index": 0 }]]
+    },
+    "Fetch Master P0": {
+      "main": [[{ "node": "Fetch Master P1", "type": "main", "index": 0 }]]
+    },
+    "Fetch Master P1": {
+      "main": [[{ "node": "Fetch Master P2", "type": "main", "index": 0 }]]
+    },
+    "Fetch Master P2": {
+      "main": [[{ "node": "Fetch Master P3", "type": "main", "index": 0 }]]
+    },
+    "Fetch Master P3": {
       "main": [[{ "node": "Resolve Task IDs", "type": "main", "index": 0 }]]
     },
     "Resolve Task IDs": {
