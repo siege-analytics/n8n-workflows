@@ -1,0 +1,411 @@
+{
+  "name": "GitLab \u2192 GitHub Issue Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "gitlab-to-github",
+        "options": {}
+      },
+      "id": "webhook-gl-gh",
+      "name": "GitLab Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "gitlab-to-github"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Anti-loop check + parse GitLab webhook payload\nconst payload = $input.first().json.body;\nconst objectKind = payload.object_kind || '';\n\nif (objectKind === 'issue') {\n  const attrs = payload.object_attributes || {};\n  const action = attrs.action || '';\n  const title = attrs.title || '';\n  const description = attrs.description || '';\n\n  // Anti-loop: skip sync-originated issues\n  if (title.includes('[sync]') || description.includes('[sync]')) {\n    return [];\n  }\n\n  const changes = payload.changes || {};\n\n  // Skip pure updates that aren't state, label, or assignee changes\n  if (action === 'update' && !changes.state && !changes.labels && !changes.assignees) {\n    return [];\n  }\n\n  // Determine normalized action\n  let normalizedAction = action;\n  if (action === 'open') normalizedAction = 'opened';\n  else if (action === 'close') normalizedAction = 'closed';\n  else if (action === 'reopen') normalizedAction = 'reopened';\n  else if (action === 'update' && changes.labels) normalizedAction = 'label_changed';\n  else if (action === 'update' && changes.assignees) normalizedAction = 'assignee_changed';\n  else if (action === 'update' && changes.state) {\n    const newState = (changes.state.current || '').toLowerCase();\n    normalizedAction = newState === 'closed' ? 'closed' : 'reopened';\n  }\n\n  // Detect label changes\n  let labelChanged = null;\n  let labelAction = null;\n  if (changes.labels) {\n    const prev = new Set((changes.labels.previous || []).map(l => l.title));\n    const curr = new Set((changes.labels.current || []).map(l => l.title));\n    const added = [...curr].filter(l => !prev.has(l));\n    const removed = [...prev].filter(l => !curr.has(l));\n    if (added.length > 0) { labelChanged = added[0]; labelAction = 'add'; }\n    else if (removed.length > 0) { labelChanged = removed[0]; labelAction = 'remove'; }\n  }\n\n  const labels = (payload.labels || []).map(l => l.title);\n\n  return [{\n    json: {\n      source: 'gitlab',\n      eventType: 'issue',\n      action: normalizedAction,\n      issueNumber: attrs.iid,\n      title: title,\n      body: description,\n      state: attrs.state === 'opened' ? 'open' : 'closed',\n      labels: labels,\n      labelChanged: labelChanged,\n      labelAction: labelAction,\n      assignees: (payload.assignees || []).map(a => ({ username: a.username, id: a.id }))\n    }\n  }];\n\n} else if (objectKind === 'note') {\n  const attrs = payload.object_attributes || {};\n  const noteBody = attrs.note || '';\n\n  if (attrs.noteable_type !== 'Issue') return [];\n  if (noteBody.includes('[sync]')) return [];\n\n  const issue = payload.issue || {};\n\n  return [{\n    json: {\n      source: 'gitlab',\n      eventType: 'comment',\n      action: 'comment',\n      issueNumber: issue.iid,\n      commentBody: noteBody,\n      commentId: attrs.id\n    }\n  }];\n}\n\nreturn [];"
+      },
+      "id": "parse-gl-gh",
+      "name": "Anti-Loop & Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.github.com/repos/YOUR_ORG/YOUR_REPO/contents/PATH_TO/issue_mapping.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": { "response": { "neverError": true } }
+        }
+      },
+      "id": "fetch-mapping-gl-gh",
+      "name": "Fetch Mapping",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "YOUR_GITHUB_CREDENTIAL_ID",
+          "name": "GitHub API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Decode mapping file from GitHub API (base64) and merge with event data\nconst response = $input.first().json;\nlet mapping = { github_to_gitlab: {}, gitlab_to_github: {} };\n\nif (response && response.content) {\n  try {\n    const decoded = Buffer.from(response.content.replace(/\\s/g, ''), 'base64').toString('utf8');\n    mapping = JSON.parse(decoded);\n  } catch (e) {\n    // If decode fails, use empty mapping\n  }\n}\n\n// Pass through event data from Anti-Loop & Parse\nconst eventData = $('Anti-Loop & Parse').first().json;\nreturn [{ json: { ...eventData, mapping: mapping } }];"
+      },
+      "id": "decode-mapping-gl-gh",
+      "name": "Decode Mapping",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "opened",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "closed",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "reopened",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "label_changed",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "comment",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "assignee_changed",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "none" }
+      },
+      "id": "switch-gl-gh",
+      "name": "Route by Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare create: skip if already mapped, add sync marker, format for GitHub API\nconst item = $input.first().json;\nconst glIid = item.issueNumber;\nconst mapping = item.mapping || {};\n\n// Skip if already mapped (bootstrapped issue)\nconst existingGhNum = (mapping.gitlab_to_github || {})[String(glIid)];\nif (existingGhNum) return [];\n\nconst syncMarker = `\\n\\n---\\n[sync] Synced from GitLab #${glIid}`;\nconst body = (item.body || '') + syncMarker;\nconst labels = (item.labels || []).join(',');\n\nreturn [{\n  json: {\n    glIid: glIid,\n    title: item.title,\n    body: body,\n    labels: labels\n  }\n}];"
+      },
+      "id": "prepare-create-gl-gh",
+      "name": "Prepare Create",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 60]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.github.com/repos/YOUR_ORG/YOUR_REPO/issues",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ title: $json.title, body: $json.body, labels: $json.labels ? $json.labels.split(',').filter(l => l) : [] }) }}",
+        "options": {}
+      },
+      "id": "api-create-gh",
+      "name": "Create GitHub Issue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1580, 60],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "YOUR_GITHUB_CREDENTIAL_ID",
+          "name": "GitHub API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lookup GH number from mapping for close action\nconst item = $input.first().json;\nconst glIid = item.issueNumber;\nconst mapping = item.mapping || {};\nconst ghNum = (mapping.gitlab_to_github || {})[String(glIid)];\nif (!ghNum) return [];\n\nreturn [{ json: { ghNumber: ghNum } }];"
+      },
+      "id": "prepare-close-gl-gh",
+      "name": "Prepare Close",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 180]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.github.com/repos/YOUR_ORG/YOUR_REPO/issues/{{ $json.ghNumber }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ state: 'closed', state_reason: 'completed' }) }}",
+        "options": {}
+      },
+      "id": "api-close-gh",
+      "name": "Close GitHub Issue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1580, 180],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "YOUR_GITHUB_CREDENTIAL_ID",
+          "name": "GitHub API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lookup GH number from mapping for reopen action\nconst item = $input.first().json;\nconst glIid = item.issueNumber;\nconst mapping = item.mapping || {};\nconst ghNum = (mapping.gitlab_to_github || {})[String(glIid)];\nif (!ghNum) return [];\n\nreturn [{ json: { ghNumber: ghNum } }];"
+      },
+      "id": "prepare-reopen-gl-gh",
+      "name": "Prepare Reopen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 300]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.github.com/repos/YOUR_ORG/YOUR_REPO/issues/{{ $json.ghNumber }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ state: 'open' }) }}",
+        "options": {}
+      },
+      "id": "api-reopen-gh",
+      "name": "Reopen GitHub Issue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1580, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "YOUR_GITHUB_CREDENTIAL_ID",
+          "name": "GitHub API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lookup GH number from mapping + prepare label change\nconst item = $input.first().json;\nconst glIid = item.issueNumber;\nconst mapping = item.mapping || {};\nconst ghNum = (mapping.gitlab_to_github || {})[String(glIid)];\nif (!ghNum) return [];\n\nconst label = item.labelChanged;\nif (!label) return [];\n\nreturn [{\n  json: {\n    ghNumber: ghNum,\n    label: label,\n    labelAction: item.labelAction\n  }\n}];"
+      },
+      "id": "prepare-label-gl-gh",
+      "name": "Prepare Label",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 420]
+    },
+    {
+      "parameters": {
+        "method": "={{ $json.labelAction === 'add' ? 'POST' : 'DELETE' }}",
+        "url": "={{ $json.labelAction === 'add' ? 'https://api.github.com/repos/YOUR_ORG/YOUR_REPO/issues/' + $json.ghNumber + '/labels' : 'https://api.github.com/repos/YOUR_ORG/YOUR_REPO/issues/' + $json.ghNumber + '/labels/' + encodeURIComponent($json.label) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.labelAction === 'add' ? JSON.stringify({ labels: [$json.label] }) : '{}' }}",
+        "options": {
+          "response": { "response": { "neverError": true } }
+        }
+      },
+      "id": "api-label-gh",
+      "name": "Update GitHub Label",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1580, 420],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "YOUR_GITHUB_CREDENTIAL_ID",
+          "name": "GitHub API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lookup GH number from mapping + prepare comment with sync marker\nconst item = $input.first().json;\nconst glIid = item.issueNumber;\nconst mapping = item.mapping || {};\nconst ghNum = (mapping.gitlab_to_github || {})[String(glIid)];\nif (!ghNum) return [];\n\nconst syncBody = `[sync] Synced from GitLab:\\n\\n${item.commentBody}`;\n\nreturn [{\n  json: {\n    ghNumber: ghNum,\n    body: syncBody\n  }\n}];"
+      },
+      "id": "prepare-comment-gl-gh",
+      "name": "Prepare Comment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 540]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.github.com/repos/YOUR_ORG/YOUR_REPO/issues/{{ $json.ghNumber }}/comments",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ body: $json.body }) }}",
+        "options": {}
+      },
+      "id": "api-comment-gh",
+      "name": "Post GitHub Comment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1580, 540],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "YOUR_GITHUB_CREDENTIAL_ID",
+          "name": "GitHub API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Map GitLab assignees to GitHub usernames and set on issue\nconst item = $input.first().json;\nconst glIid = item.issueNumber;\nconst mapping = item.mapping || {};\nconst ghNum = (mapping.gitlab_to_github || {})[String(glIid)];\nif (!ghNum) return [];\n\n// GitLab user ID \u2192 GitHub login mapping\nconst userMap = {\n  // gitlab_user_id: 'github_login',\n  // Example: 342200: 'dheerajchand',\n};\n\n// Map all current GL assignees to GH usernames\nconst ghAssignees = (item.assignees || [])\n  .map(a => userMap[a.id])\n  .filter(name => name);\n\nreturn [{ json: { ghNumber: ghNum, assignees: ghAssignees } }];"
+      },
+      "id": "prepare-assign-gl-gh",
+      "name": "Prepare Assign",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 660]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.github.com/repos/YOUR_ORG/YOUR_REPO/issues/{{ $json.ghNumber }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ assignees: $json.assignees }) }}",
+        "options": {
+          "response": { "response": { "neverError": true } }
+        }
+      },
+      "id": "api-assign-gh",
+      "name": "Assign GitHub Issue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1580, 660],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "YOUR_GITHUB_CREDENTIAL_ID",
+          "name": "GitHub API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "GitLab Webhook": {
+      "main": [
+        [{ "node": "Anti-Loop & Parse", "type": "main", "index": 0 }]
+      ]
+    },
+    "Anti-Loop & Parse": {
+      "main": [
+        [{ "node": "Fetch Mapping", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch Mapping": {
+      "main": [
+        [{ "node": "Decode Mapping", "type": "main", "index": 0 }]
+      ]
+    },
+    "Decode Mapping": {
+      "main": [
+        [{ "node": "Route by Action", "type": "main", "index": 0 }]
+      ]
+    },
+    "Route by Action": {
+      "main": [
+        [{ "node": "Prepare Create", "type": "main", "index": 0 }],
+        [{ "node": "Prepare Close", "type": "main", "index": 0 }],
+        [{ "node": "Prepare Reopen", "type": "main", "index": 0 }],
+        [{ "node": "Prepare Label", "type": "main", "index": 0 }],
+        [{ "node": "Prepare Comment", "type": "main", "index": 0 }],
+        [{ "node": "Prepare Assign", "type": "main", "index": 0 }]
+      ]
+    },
+    "Prepare Assign": {
+      "main": [
+        [{ "node": "Assign GitHub Issue", "type": "main", "index": 0 }]
+      ]
+    },
+    "Prepare Create": {
+      "main": [
+        [{ "node": "Create GitHub Issue", "type": "main", "index": 0 }]
+      ]
+    },
+    "Prepare Close": {
+      "main": [
+        [{ "node": "Close GitHub Issue", "type": "main", "index": 0 }]
+      ]
+    },
+    "Prepare Reopen": {
+      "main": [
+        [{ "node": "Reopen GitHub Issue", "type": "main", "index": 0 }]
+      ]
+    },
+    "Prepare Label": {
+      "main": [
+        [{ "node": "Update GitHub Label", "type": "main", "index": 0 }]
+      ]
+    },
+    "Prepare Comment": {
+      "main": [
+        [{ "node": "Post GitHub Comment", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "pinData": {},
+  "active": false
+}
