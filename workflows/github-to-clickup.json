@@ -14,7 +14,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.first().json.body;\nconst action = body.action;\nconst issue = body.issue || {};\nconst comment = body.comment || {};\n\nconst title = issue.title || '';\nconst issueBody = issue.body || '';\nconst commentBody = comment.body || '';\n\nif (title.includes('[sync]') || issueBody.includes('[sync]') || commentBody.includes('[sync]')) {\n  return [];\n}\n\nconst repo = body.repository ? body.repository.full_name : 'unknown';\nconst repoShort = body.repository ? body.repository.name : 'unknown';\n\nconst listMap = {\n  'enterprise': '901710789803',\n  'siege_utilities': '901710789806',\n  'rundeck': '901710789808',\n  'ops': '901710789809',\n  'portainer': '901710789810'\n};\n\nconst masterListId = '901710789811';\nconst repoListId = listMap[repoShort] || null;\nif (!repoListId) return [];\n\nreturn [{\n  json: {\n    action, repo, repoShort, repoListId, masterListId,\n    issueNumber: issue.number,\n    issueTitle: issue.title,\n    issueBody: issue.body || '',\n    issueState: issue.state,\n    issueUrl: issue.html_url,\n    issueLabels: (issue.labels || []).map(l => l.name),\n    commentBody: comment.body || '',\n    commentUser: comment.user ? comment.user.login : '',\n    senderLogin: body.sender ? body.sender.login : ''\n  }\n}];\n"
+        "jsCode": "const body = $input.first().json.body;\nconst action = body.action;\nconst issue = body.issue || {};\nconst comment = body.comment || {};\n\nconst title = issue.title || '';\nconst issueBody = issue.body || '';\nconst commentBody = comment.body || '';\n\nif (title.includes('[sync]') || issueBody.includes('[sync]') || commentBody.includes('[sync]')) {\n  return [];\n}\n\nconst repo = body.repository ? body.repository.full_name : 'unknown';\nconst repoShort = body.repository ? body.repository.name : 'unknown';\n\nconst listMap = {\n  'enterprise': '901710789803',\n  'siege_utilities': '901710789806',\n  'rundeck': '901710789808',\n  'ops': '901710789809',\n  'portainer': '901710789810'\n};\n\nconst masterListId = '901710789811';\nconst repoListId = listMap[repoShort] || null;\nif (!repoListId) return [];\n\nconst assignee = body.assignee || {};\nconst currentAssignees = (issue.assignees || []).map(a => a.login);\n\nreturn [{\n  json: {\n    action, repo, repoShort, repoListId, masterListId,\n    issueNumber: issue.number,\n    issueTitle: issue.title,\n    issueBody: issue.body || '',\n    issueState: issue.state,\n    issueUrl: issue.html_url,\n    issueLabels: (issue.labels || []).map(l => l.name),\n    commentBody: comment.body || '',\n    commentUser: comment.user ? comment.user.login : '',\n    senderLogin: body.sender ? body.sender.login : '',\n    assigneeLogin: assignee.login || '',\n    currentAssignees: currentAssignees\n  }\n}];\n"
       },
       "name": "Anti-Loop & Parse",
       "type": "n8n-nodes-base.code",
@@ -32,7 +32,9 @@
             { "value2": "reopened", "output": 2 },
             { "value2": "labeled", "output": 3 },
             { "value2": "unlabeled", "output": 3 },
-            { "value2": "created", "output": 4 }
+            { "value2": "created", "output": 4 },
+            { "value2": "assigned", "output": 5 },
+            { "value2": "unassigned", "output": 5 }
           ]
         }
       },
@@ -43,7 +45,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.github_to_clickup) staticData.github_to_clickup = {};\nif (!staticData.clickup_to_github) staticData.clickup_to_github = {};\n\nconst mappingKey = `${data.repoShort}/${data.issueNumber}`;\nif (staticData.github_to_clickup[mappingKey]) {\n  return [{ json: { skipped: true, reason: 'already mapped', mappingKey } }];\n}\n\nreturn [{\n  json: {\n    ...data, mappingKey,\n    taskName: `[${data.repoShort}#${data.issueNumber}] ${data.issueTitle}`,\n    taskDescription: `[sync] Synced from GitHub: ${data.issueUrl}\\n\\n${data.issueBody}`,\n    tags: data.issueLabels\n  }\n}];\n"
+        "jsCode": "const data = $input.first().json;\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.github_to_clickup) staticData.github_to_clickup = {};\nif (!staticData.clickup_to_github) staticData.clickup_to_github = {};\n\nconst mappingKey = `${data.repoShort}/${data.issueNumber}`;\nif (staticData.github_to_clickup[mappingKey]) {\n  return [{ json: { skipped: true, reason: 'already mapped', mappingKey } }];\n}\n\nconst ghToClickupUser = {\n  'dheerajchand': 95317754,\n  'steveblackmon': 192189161\n};\nconst assigneeIds = (data.currentAssignees || [])\n  .map(login => ghToClickupUser[login])\n  .filter(id => id !== undefined);\n\nreturn [{\n  json: {\n    ...data, mappingKey,\n    taskName: `[${data.repoShort}#${data.issueNumber}] ${data.issueTitle}`,\n    taskDescription: `[sync] Synced from GitHub: ${data.issueUrl}\\n\\n${data.issueBody}`,\n    tags: data.issueLabels,\n    assigneeIds: assigneeIds\n  }\n}];\n"
       },
       "name": "Prepare Create",
       "type": "n8n-nodes-base.code",
@@ -58,7 +60,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({name: $json.taskName, description: $json.taskDescription, tags: $json.tags, status: 'backlog'}) }}",
+        "jsonBody": "={{ JSON.stringify({name: $json.taskName, description: $json.taskDescription, tags: $json.tags, status: 'backlog', assignees: $json.assigneeIds}) }}",
         "options": {}
       },
       "name": "Create Repo Task",
@@ -75,7 +77,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({name: $('Prepare Create').item.json.taskName, description: $('Prepare Create').item.json.taskDescription, tags: $('Prepare Create').item.json.tags, status: 'backlog'}) }}",
+        "jsonBody": "={{ JSON.stringify({name: $('Prepare Create').item.json.taskName, description: $('Prepare Create').item.json.taskDescription, tags: $('Prepare Create').item.json.tags, status: 'backlog', assignees: $('Prepare Create').item.json.assigneeIds}) }}",
         "options": {}
       },
       "name": "Create Master Task",
@@ -264,6 +266,69 @@
       "typeVersion": 4.2,
       "position": [1440, 800],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst staticData = $getWorkflowStaticData('global');\nconst mapping = (staticData.github_to_clickup || {})[`${data.repoShort}/${data.issueNumber}`];\nif (!mapping) return [{ json: { skipped: true, reason: 'no mapping' } }];\n\nconst ghToClickupUser = {\n  'dheerajchand': 95317754,\n  'steveblackmon': 192189161\n};\n\nconst clickupUserId = ghToClickupUser[data.assigneeLogin];\nif (!clickupUserId) return [{ json: { skipped: true, reason: 'unknown assignee', login: data.assigneeLogin } }];\n\nlet assigneePayload;\nif (data.action === 'assigned') {\n  assigneePayload = { assignees: { add: [clickupUserId], rem: [] } };\n} else {\n  assigneePayload = { assignees: { add: [], rem: [clickupUserId] } };\n}\n\nreturn [{\n  json: {\n    repoTaskId: mapping.repo_list,\n    masterTaskId: mapping.master_list,\n    assigneePayload: assigneePayload\n  }\n}];\n"
+      },
+      "name": "Prepare Assignee Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 980]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://api.clickup.com/api/v2/task/{{ $json.repoTaskId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.assigneePayload) }}",
+        "options": {}
+      },
+      "name": "Update Repo Assignees",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 960],
+      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://api.clickup.com/api/v2/task/{{ $('Prepare Assignee Update').item.json.masterTaskId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Prepare Assignee Update').item.json.assigneePayload) }}",
+        "options": {}
+      },
+      "name": "Update Master Assignees",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 980],
+      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rebuild-mappings",
+        "options": {}
+      },
+      "name": "Rebuild Mapping Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 1160]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body;\nconst staticData = $getWorkflowStaticData('global');\n\nif (!body || !body.github_to_clickup || !body.clickup_to_github) {\n  return [{ json: { success: false, error: 'Invalid payload: must contain github_to_clickup and clickup_to_github objects' } }];\n}\n\nstaticData.github_to_clickup = body.github_to_clickup;\nstaticData.clickup_to_github = body.clickup_to_github;\n\nconst ghCount = Object.keys(body.github_to_clickup).length;\nconst cuCount = Object.keys(body.clickup_to_github).length;\n\nreturn [{ json: { success: true, github_to_clickup_count: ghCount, clickup_to_github_count: cuCount } }];\n"
+      },
+      "name": "Save Rebuilt Mappings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 1160]
     }
   ],
   "connections": {
@@ -279,7 +344,8 @@
         [{ "node": "Prepare Close", "type": "main", "index": 0 }],
         [{ "node": "Prepare Reopen", "type": "main", "index": 0 }],
         [{ "node": "Prepare Label Update", "type": "main", "index": 0 }],
-        [{ "node": "Prepare Comment", "type": "main", "index": 0 }]
+        [{ "node": "Prepare Comment", "type": "main", "index": 0 }],
+        [{ "node": "Prepare Assignee Update", "type": "main", "index": 0 }]
       ]
     },
     "Prepare Create": {
@@ -314,6 +380,15 @@
     },
     "Comment Repo Task": {
       "main": [[{ "node": "Comment Master Task", "type": "main", "index": 0 }]]
+    },
+    "Prepare Assignee Update": {
+      "main": [[{ "node": "Update Repo Assignees", "type": "main", "index": 0 }]]
+    },
+    "Update Repo Assignees": {
+      "main": [[{ "node": "Update Master Assignees", "type": "main", "index": 0 }]]
+    },
+    "Rebuild Mapping Webhook": {
+      "main": [[{ "node": "Save Rebuilt Mappings", "type": "main", "index": 0 }]]
     }
   },
   "settings": { "executionOrder": "v1" },

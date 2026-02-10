@@ -181,12 +181,29 @@ curl -s -X POST "https://api.clickup.com/api/v2/team/<TEAM_ID>/webhook" \
       "taskCreated",
       "taskUpdated",
       "taskStatusUpdated",
-      "taskCommentPosted"
+      "taskCommentPosted",
+      "taskAssigneeUpdated"
     ]
   }'
 ```
 
-## Step 8: End-to-End Test
+## Step 8: Rebuild Mappings (after reimport)
+
+If you reimport Workflow A via the n8n UI, the static data (issue-to-task mappings) is lost. Rebuild it:
+
+```bash
+export CLICKUP_TOKEN="pk_..."
+
+# Preview what will be rebuilt
+./scripts/rebuild-mappings.sh --dry-run
+
+# Rebuild for real
+./scripts/rebuild-mappings.sh
+```
+
+This fetches all ClickUp tasks, parses their names, and POSTs the mapping to the workflow's rebuild webhook (`/webhook/rebuild-mappings`).
+
+## Step 9: End-to-End Test
 
 1. Create a test issue on GitHub: `gh issue create --repo electinfo/enterprise --title "Test sync" --body "Testing two-way sync"`
 2. Wait ~5 seconds, check ClickUp — a task should appear in both the enterprise list and the Master list

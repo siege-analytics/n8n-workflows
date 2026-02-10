@@ -45,11 +45,15 @@ All tasks also appear in a **Master** list for a unified cross-repo view.
 | Issue reopened | Task status → backlog |
 | Label added/removed | Task status updated |
 | Comment posted | Comment synced |
+| Issue assigned | Task assignee added |
+| Issue unassigned | Task assignee removed |
 
 | ClickUp Event | GitHub Action |
 |---------------|--------------|
 | Status changed | Issue closed/reopened + label updated |
 | Comment posted | Comment synced |
+| Assignee added | Issue assignee added |
+| Assignee removed | Issue assignee removed |
 
 ### Status Mapping
 
@@ -65,9 +69,18 @@ All tasks also appear in a **Master** list for a unified cross-repo view.
 | shipped | *(closed, completed)* |
 | cancelled | *(closed, not_planned)* |
 
+### User Mapping (Assignee Sync)
+
+| Person | GitHub Login | ClickUp User ID |
+|--------|-------------|----------------|
+| Dheeraj | `dheerajchand` | `95317754` |
+| Steve | `steveblackmon` | `192189161` |
+
+To add a new user, update the mapping objects in Workflow A's "Prepare Create" and "Prepare Assignee Update" code nodes, and Workflow B's "Map Assignee" code node.
+
 ### Anti-Loop Protection
 
-Both workflows check for `[sync]` markers in titles, bodies, and comments. Synced content is prefixed with `[sync]` to prevent infinite loops.
+Both workflows check for `[sync]` markers in titles, bodies, and comments. Synced content is prefixed with `[sync]` to prevent infinite loops. Assignee sync relies on API idempotency (adding/removing an already-present/absent assignee is a no-op that does not fire a new webhook).
 
 ## Setup
 
@@ -101,6 +114,7 @@ The `scripts/bootstrap-issues.sh` script syncs existing GitHub issues into Click
 - **Dual-write**: every GitHub issue creates tasks in both the repo-specific list and the Master list. Both ClickUp task IDs are stored in the mapping.
 - **Sequential execution**: the Create Repo Task and Create Master Task nodes run sequentially (not in parallel). n8n parallel branches into a single downstream node cause "Node X hasn't been executed" errors.
 - **n8n credentials**: the workflows reference two `httpHeaderAuth` credentials by ID — one for ClickUp API and one for GitHub API. These must exist in n8n before importing the workflows. See [docs/setup.md](docs/setup.md).
+- **Rebuild mappings**: after reimporting Workflow A, static data is lost. Run `scripts/rebuild-mappings.sh` to reconstruct the mapping from existing ClickUp tasks. This POSTs to a second webhook trigger (`/webhook/rebuild-mappings`) within the same workflow.
 
 ## Project Structure
 
@@ -111,7 +125,8 @@ The `scripts/bootstrap-issues.sh` script syncs existing GitHub issues into Click
 │   ├── github-to-clickup.json    # Workflow A: GitHub → ClickUp
 │   └── clickup-to-github.json    # Workflow B: ClickUp → GitHub
 ├── scripts/
-│   └── bootstrap-issues.sh       # Bulk sync existing issues
+│   ├── bootstrap-issues.sh       # Bulk sync existing issues
+│   └── rebuild-mappings.sh       # Rebuild static data after reimport
 └── docs/
     ├── setup.md                  # Initial deployment guide
     └── adding-repos.md           # How to add new repos to sync

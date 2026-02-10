@@ -61,7 +61,7 @@ for full_repo in "${REPOS[@]}"; do
 
   # Fetch all issues (open + closed)
   issues_json=$(gh issue list --repo "$full_repo" --state all --limit 500 \
-    --json number,title,body,state,labels,url 2>/dev/null || echo "[]")
+    --json number,title,body,state,labels,url,assignees 2>/dev/null || echo "[]")
 
   issue_count=$(echo "$issues_json" | jq 'length')
   echo "Found $issue_count issues"
@@ -74,6 +74,7 @@ for full_repo in "${REPOS[@]}"; do
     state=$(echo "$issue" | jq -r '.state')
     url=$(echo "$issue" | jq -r '.url')
     labels=$(echo "$issue" | jq '[.labels[].name]')
+    assignees=$(echo "$issue" | jq '[.assignees[].login]')
 
     echo -n "  #$number ($state): $title ... "
 
@@ -88,6 +89,7 @@ for full_repo in "${REPOS[@]}"; do
       --arg state "$state" \
       --arg html_url "$url" \
       --argjson labels "$labels" \
+      --argjson assignees "$assignees" \
       '{
         action: $action,
         issue: {
@@ -96,7 +98,8 @@ for full_repo in "${REPOS[@]}"; do
           body: $body,
           state: "open",
           html_url: $html_url,
-          labels: [$labels[] | {name: .}]
+          labels: [$labels[] | {name: .}],
+          assignees: [$assignees[] | {login: .}]
         },
         repository: {
           full_name: $full_name,
@@ -203,6 +206,54 @@ for full_repo in "${REPOS[@]}"; do
 
       sleep "$DELAY"
     fi
+
+    # If issue has assignees, send "assigned" event for each
+    assignee_count=$(echo "$assignees" | jq 'length')
+    for ai in $(seq 0 $((assignee_count - 1))); do
+      assignee_login=$(echo "$assignees" | jq -r ".[$ai]")
+      assigned_payload=$(jq -n \
+        --arg full_name "$full_repo" \
+        --arg repo_name "$repo_short" \
+        --argjson number "$number" \
+        --arg title "$title" \
+        --arg html_url "$url" \
+        --argjson labels "$labels" \
+        --arg assignee_login "$assignee_login" \
+        --argjson all_assignees "$assignees" \
+        '{
+          action: "assigned",
+          assignee: {
+            login: $assignee_login
+          },
+          issue: {
+            number: $number,
+            title: $title,
+            body: "",
+            state: "open",
+            html_url: $html_url,
+            labels: [$labels[] | {name: .}],
+            assignees: [$all_assignees[] | {login: .}]
+          },
+          repository: {
+            full_name: $full_name,
+            name: $repo_name
+          },
+          sender: {
+            login: "bootstrap-script"
+          }
+        }')
+
+      result=$(send_webhook "$assigned_payload")
+      if [[ "$result" == "200" ]] || $DRY_RUN; then
+        echo -n "→assigned($assignee_login) "
+        total_sent=$((total_sent + 1))
+      else
+        echo -n "ASSIGN-ERROR($result) "
+        total_errors=$((total_errors + 1))
+      fi
+
+      sleep "$DELAY"
+    done
 
     echo ""
   done

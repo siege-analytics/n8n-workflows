@@ -14,7 +14,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.first().json.body;\nconst event = body.event;\nconst taskId = body.task_id || (body.history_items && body.history_items[0] ? body.history_items[0].parent_id : null);\n\nconst historyItems = body.history_items || [];\nfor (const item of historyItems) {\n  if (item.comment && item.comment.text_content && item.comment.text_content.includes('[sync]')) {\n    return [];\n  }\n}\n\nlet action = 'unknown';\nif (event === 'taskCreated') action = 'created';\nelse if (event === 'taskUpdated') action = 'updated';\nelse if (event === 'taskStatusUpdated') action = 'status_changed';\nelse if (event === 'taskCommentPosted') action = 'comment';\nelse return [];\n\nlet newStatus = null;\nlet oldStatus = null;\nfor (const item of historyItems) {\n  if (item.field === 'status') {\n    newStatus = item.after ? item.after.status : null;\n    oldStatus = item.before ? item.before.status : null;\n  }\n}\n\nlet commentText = '';\nfor (const item of historyItems) {\n  if (item.comment && item.comment.text_content) {\n    commentText = item.comment.text_content;\n  }\n}\n\nreturn [{ json: { event, action, taskId, newStatus, oldStatus, commentText, webhookId: body.webhook_id } }];\n"
+        "jsCode": "const body = $input.first().json.body;\nconst event = body.event;\nconst taskId = body.task_id || (body.history_items && body.history_items[0] ? body.history_items[0].parent_id : null);\n\nconst historyItems = body.history_items || [];\nfor (const item of historyItems) {\n  if (item.comment && item.comment.text_content && item.comment.text_content.includes('[sync]')) {\n    return [];\n  }\n}\n\nlet action = 'unknown';\nif (event === 'taskCreated') action = 'created';\nelse if (event === 'taskUpdated') action = 'updated';\nelse if (event === 'taskStatusUpdated') action = 'status_changed';\nelse if (event === 'taskCommentPosted') action = 'comment';\nelse if (event === 'taskAssigneeUpdated') action = 'assignee_changed';\nelse return [];\n\nlet newStatus = null;\nlet oldStatus = null;\nfor (const item of historyItems) {\n  if (item.field === 'status') {\n    newStatus = item.after ? item.after.status : null;\n    oldStatus = item.before ? item.before.status : null;\n  }\n}\n\nlet commentText = '';\nfor (const item of historyItems) {\n  if (item.comment && item.comment.text_content) {\n    commentText = item.comment.text_content;\n  }\n}\n\nlet assigneeAddId = null;\nlet assigneeRemId = null;\nfor (const item of historyItems) {\n  if (item.field === 'assignee_add' && item.after) {\n    assigneeAddId = item.after.id;\n  }\n  if (item.field === 'assignee_rem' && item.before) {\n    assigneeRemId = item.before.id;\n  }\n}\n\nreturn [{ json: { event, action, taskId, newStatus, oldStatus, commentText, webhookId: body.webhook_id, assigneeAddId, assigneeRemId } }];\n"
       },
       "name": "Anti-Loop & Parse",
       "type": "n8n-nodes-base.code",
@@ -51,7 +51,8 @@
         "rules": {
           "rules": [
             { "value2": "status_changed", "output": 0 },
-            { "value2": "comment", "output": 1 }
+            { "value2": "comment", "output": 1 },
+            { "value2": "assignee_changed", "output": 2 }
           ]
         }
       },
@@ -160,6 +161,65 @@
       "typeVersion": 4.2,
       "position": [1680, 440],
       "credentials": { "httpHeaderAuth": { "id": "SbQTxL2kanI77ymm", "name": "GitHub API" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nif (!data.mapped || !data.fullRepo || !data.issueNumber) return [{ json: { skipped: true } }];\n\nconst clickupToGhUser = {\n  '95317754': 'dheerajchand',\n  '192189161': 'steveblackmon'\n};\n\nlet githubLogin = null;\nlet assigneeAction = null;\n\nif (data.assigneeAddId) {\n  githubLogin = clickupToGhUser[String(data.assigneeAddId)];\n  assigneeAction = 'add';\n}\nif (data.assigneeRemId) {\n  githubLogin = clickupToGhUser[String(data.assigneeRemId)];\n  assigneeAction = 'remove';\n}\n\nif (!githubLogin || !assigneeAction) {\n  return [{ json: { skipped: true, reason: 'unknown ClickUp user or no assignee change' } }];\n}\n\nreturn [{ json: {\n  fullRepo: data.fullRepo,\n  issueNumber: data.issueNumber,\n  githubLogin: githubLogin,\n  assigneeAction: assigneeAction\n}}];\n"
+      },
+      "name": "Map Assignee",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1440, 520]
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.assigneeAction }}",
+        "rules": {
+          "rules": [
+            { "value2": "add", "output": 0 },
+            { "value2": "remove", "output": 1 }
+          ]
+        }
+      },
+      "name": "Route Assignee Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [1680, 520]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.github.com/repos/{{ $('Map Assignee').item.json.fullRepo }}/issues/{{ $('Map Assignee').item.json.issueNumber }}/assignees",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({assignees: [$('Map Assignee').item.json.githubLogin]}) }}",
+        "options": {}
+      },
+      "name": "Add GitHub Assignee",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1920, 480],
+      "credentials": { "httpHeaderAuth": { "id": "SbQTxL2kanI77ymm", "name": "GitHub API" } }
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "=https://api.github.com/repos/{{ $('Map Assignee').item.json.fullRepo }}/issues/{{ $('Map Assignee').item.json.issueNumber }}/assignees",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({assignees: [$('Map Assignee').item.json.githubLogin]}) }}",
+        "options": {}
+      },
+      "name": "Remove GitHub Assignee",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1920, 580],
+      "credentials": { "httpHeaderAuth": { "id": "SbQTxL2kanI77ymm", "name": "GitHub API" } }
     }
   ],
   "connections": {
@@ -178,7 +238,8 @@
     "Route by Action": {
       "main": [
         [{ "node": "Map Status", "type": "main", "index": 0 }],
-        [{ "node": "Prepare Comment", "type": "main", "index": 0 }]
+        [{ "node": "Prepare Comment", "type": "main", "index": 0 }],
+        [{ "node": "Map Assignee", "type": "main", "index": 0 }]
       ]
     },
     "Map Status": {
@@ -195,6 +256,15 @@
     },
     "Prepare Comment": {
       "main": [[{ "node": "Post GitHub Comment", "type": "main", "index": 0 }]]
+    },
+    "Map Assignee": {
+      "main": [[{ "node": "Route Assignee Action", "type": "main", "index": 0 }]]
+    },
+    "Route Assignee Action": {
+      "main": [
+        [{ "node": "Add GitHub Assignee", "type": "main", "index": 0 }],
+        [{ "node": "Remove GitHub Assignee", "type": "main", "index": 0 }]
+      ]
     }
   },
   "settings": { "executionOrder": "v1" },
