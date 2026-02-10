@@ -181,7 +181,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [{ json: { skipped: true, reason: 'task not found' } }];\nreturn [{ json: { repoTaskId: data.repoTaskId, masterTaskId: data.masterTaskId, status: 'shipped' } }];\n"
+        "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [];\nreturn [{ json: { repoTaskId: data.repoTaskId, masterTaskId: data.masterTaskId, status: 'shipped' } }];\n"
       },
       "name": "Prepare Close",
       "type": "n8n-nodes-base.code",
@@ -224,7 +224,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [{ json: { skipped: true, reason: 'task not found' } }];\nreturn [{ json: { repoTaskId: data.repoTaskId, masterTaskId: data.masterTaskId, status: 'backlog' } }];\n"
+        "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [];\nreturn [{ json: { repoTaskId: data.repoTaskId, masterTaskId: data.masterTaskId, status: 'backlog' } }];\n"
       },
       "name": "Prepare Reopen",
       "type": "n8n-nodes-base.code",
@@ -267,7 +267,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [{ json: { skipped: true, reason: 'task not found' } }];\n\nconst labelToStatus = {\n  'status:scoping': 'scoping',\n  'status:in-design': 'in design',\n  'status:ready': 'ready for development',\n  'status:in-progress': 'in development',\n  'status:in-review': 'in review',\n  'status:testing': 'testing'\n};\n\nconst statusLabels = data.issueLabels.filter(l => l.startsWith('status:'));\nlet clickupStatus = 'backlog';\nif (statusLabels.length > 0) {\n  clickupStatus = labelToStatus[statusLabels[statusLabels.length - 1]] || 'backlog';\n}\n\nreturn [{ json: { repoTaskId: data.repoTaskId, masterTaskId: data.masterTaskId, status: clickupStatus } }];\n"
+        "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [];\n\nconst labelToStatus = {\n  'status:scoping': 'scoping',\n  'status:in-design': 'in design',\n  'status:ready': 'ready for development',\n  'status:in-progress': 'in development',\n  'status:in-review': 'in review',\n  'status:testing': 'testing'\n};\n\nconst statusLabels = data.issueLabels.filter(l => l.startsWith('status:'));\nlet clickupStatus = 'backlog';\nif (statusLabels.length > 0) {\n  clickupStatus = labelToStatus[statusLabels[statusLabels.length - 1]] || 'backlog';\n}\n\nreturn [{ json: { repoTaskId: data.repoTaskId, masterTaskId: data.masterTaskId, status: clickupStatus } }];\n"
       },
       "name": "Prepare Label Update",
       "type": "n8n-nodes-base.code",
@@ -310,7 +310,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [{ json: { skipped: true, reason: 'task not found' } }];\n\nconst commentText = `[sync] Synced from GitHub (${data.commentUser}):\\n\\n${data.commentBody}`;\nreturn [{ json: { repoTaskId: data.repoTaskId, masterTaskId: data.masterTaskId, commentText } }];\n"
+        "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [];\n\nconst commentText = `[sync] Synced from GitHub (${data.commentUser}):\\n\\n${data.commentBody}`;\nreturn [{ json: { repoTaskId: data.repoTaskId, masterTaskId: data.masterTaskId, commentText } }];\n"
       },
       "name": "Prepare Comment",
       "type": "n8n-nodes-base.code",
@@ -353,7 +353,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [{ json: { skipped: true, reason: 'task not found' } }];\n\nconst ghToClickupUser = {\n  'dheerajchand': 95317754,\n  'steveblackmon': 192189161\n};\n\nconst clickupUserId = ghToClickupUser[data.assigneeLogin];\nif (!clickupUserId) return [{ json: { skipped: true, reason: 'unknown assignee', login: data.assigneeLogin } }];\n\nlet assigneePayload;\nif (data.action === 'assigned') {\n  assigneePayload = { assignees: { add: [clickupUserId], rem: [] } };\n} else {\n  assigneePayload = { assignees: { add: [], rem: [clickupUserId] } };\n}\n\nreturn [{\n  json: {\n    repoTaskId: data.repoTaskId,\n    masterTaskId: data.masterTaskId,\n    assigneePayload: assigneePayload\n  }\n}];\n"
+        "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [];\n\nconst ghToClickupUser = {\n  'dheerajchand': 95317754,\n  'steveblackmon': 192189161\n};\n\nconst clickupUserId = ghToClickupUser[data.assigneeLogin];\nif (!clickupUserId) return [];\n\nlet assigneePayload;\nif (data.action === 'assigned') {\n  assigneePayload = { assignees: { add: [clickupUserId], rem: [] } };\n} else {\n  assigneePayload = { assignees: { add: [], rem: [clickupUserId] } };\n}\n\nreturn [{\n  json: {\n    repoTaskId: data.repoTaskId,\n    masterTaskId: data.masterTaskId,\n    assigneePayload: assigneePayload\n  }\n}];\n"
       },
       "name": "Prepare Assignee Update",
       "type": "n8n-nodes-base.code",
