@@ -72,7 +72,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nif (!data.mapped || !data.fullRepo || !data.issueNumber) return [{ json: { skipped: true } }];\n\nlet body = {};\nif (data.githubAction === 'close') body = { state: 'closed', state_reason: data.closeReason || 'completed' };\nelse if (data.githubAction === 'reopen') body = { state: 'open' };\nelse body = null;\n\nreturn [{ json: { ...data, apiUrl: `https://api.github.com/repos/${data.fullRepo}/issues/${data.issueNumber}`, apiBody: body } }];\n"
+        "jsCode": "const data = $input.first().json;\nif (!data.mapped || !data.fullRepo || !data.issueNumber) return [];\n\nlet body = {};\nif (data.githubAction === 'close') body = { state: 'closed', state_reason: data.closeReason || 'completed' };\nelse if (data.githubAction === 'reopen') body = { state: 'open' };\nelse body = null;\n\nreturn [{ json: { ...data, apiUrl: `https://api.github.com/repos/${data.fullRepo}/issues/${data.issueNumber}`, apiBody: body } }];\n"
       },
       "name": "Build GitHub Request",
       "type": "n8n-nodes-base.code",
@@ -98,7 +98,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nif (!data.mapped || data.githubAction !== 'label' || !data.newLabel) return [{ json: { skipped: true } }];\nreturn [{ json: { fullRepo: data.fullRepo, issueNumber: data.issueNumber, addLabel: data.newLabel, removeLabel: data.oldLabel } }];\n"
+        "jsCode": "const data = $input.first().json;\nif (!data.mapped || data.githubAction !== 'label' || !data.newLabel) return [];\nreturn [{ json: { fullRepo: data.fullRepo, issueNumber: data.issueNumber, addLabel: data.newLabel, removeLabel: data.oldLabel } }];\n"
       },
       "name": "Prepare Label Change",
       "type": "n8n-nodes-base.code",
@@ -138,7 +138,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nif (!data.mapped || !data.fullRepo || !data.issueNumber) return [{ json: { skipped: true } }];\n\nconst commentBody = `[sync] Synced from ClickUp:\\n\\n${data.commentText}`;\nreturn [{ json: { fullRepo: data.fullRepo, issueNumber: data.issueNumber, commentBody } }];\n"
+        "jsCode": "const data = $input.first().json;\nif (!data.mapped || !data.fullRepo || !data.issueNumber) return [];\n\nconst commentBody = `[sync] Synced from ClickUp:\\n\\n${data.commentText}`;\nreturn [{ json: { fullRepo: data.fullRepo, issueNumber: data.issueNumber, commentBody } }];\n"
       },
       "name": "Prepare Comment",
       "type": "n8n-nodes-base.code",
@@ -164,7 +164,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nif (!data.mapped || !data.fullRepo || !data.issueNumber) return [{ json: { skipped: true } }];\n\nconst clickupToGhUser = {\n  '95317754': 'dheerajchand',\n  '192189161': 'steveblackmon'\n};\n\nlet githubLogin = null;\nlet assigneeAction = null;\n\nif (data.assigneeAddId) {\n  githubLogin = clickupToGhUser[String(data.assigneeAddId)];\n  assigneeAction = 'add';\n}\nif (data.assigneeRemId) {\n  githubLogin = clickupToGhUser[String(data.assigneeRemId)];\n  assigneeAction = 'remove';\n}\n\nif (!githubLogin || !assigneeAction) {\n  return [{ json: { skipped: true, reason: 'unknown ClickUp user or no assignee change' } }];\n}\n\nreturn [{ json: {\n  fullRepo: data.fullRepo,\n  issueNumber: data.issueNumber,\n  githubLogin: githubLogin,\n  assigneeAction: assigneeAction\n}}];\n"
+        "jsCode": "const data = $input.first().json;\nif (!data.mapped || !data.fullRepo || !data.issueNumber) return [];\n\nconst clickupToGhUser = {\n  '95317754': 'dheerajchand',\n  '192189161': 'steveblackmon'\n};\n\nlet githubLogin = null;\nlet assigneeAction = null;\n\nif (data.assigneeAddId) {\n  githubLogin = clickupToGhUser[String(data.assigneeAddId)];\n  assigneeAction = 'add';\n}\nif (data.assigneeRemId) {\n  githubLogin = clickupToGhUser[String(data.assigneeRemId)];\n  assigneeAction = 'remove';\n}\n\nif (!githubLogin || !assigneeAction) return [];\n\nreturn [{ json: {\n  fullRepo: data.fullRepo,\n  issueNumber: data.issueNumber,\n  githubLogin: githubLogin,\n  assigneeAction: assigneeAction\n}}];\n"
       },
       "name": "Map Assignee",
       "type": "n8n-nodes-base.code",
