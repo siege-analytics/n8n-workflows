@@ -1,5 +1,5 @@
 {
-  "name": "GitHub → ClickUp Sync",
+  "name": "GitHub \u2192 ClickUp Sync",
   "nodes": [
     {
       "parameters": {
@@ -14,12 +14,49 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.first().json.body;\nconst action = body.action;\n\nif (action === 'rebuild-mappings') {\n  return [{ json: { action: 'rebuild-mappings', github_to_clickup: body.github_to_clickup, clickup_to_github: body.clickup_to_github } }];\n}\n\nconst issue = body.issue || {};\nconst comment = body.comment || {};\n\nconst title = issue.title || '';\nconst issueBody = issue.body || '';\nconst commentBody = comment.body || '';\n\nif (title.includes('[sync]') || issueBody.includes('[sync]') || commentBody.includes('[sync]')) {\n  return [];\n}\n\nconst repo = body.repository ? body.repository.full_name : 'unknown';\nconst repoShort = body.repository ? body.repository.name : 'unknown';\n\nconst listMap = {\n  'enterprise': '901710789803',\n  'siege_utilities': '901710789806',\n  'rundeck': '901710789808',\n  'ops': '901710789809',\n  'portainer': '901710789810'\n};\n\nconst masterListId = '901710789811';\nconst repoListId = listMap[repoShort] || null;\nif (!repoListId) return [];\n\nconst assignee = body.assignee || {};\nconst currentAssignees = (issue.assignees || []).map(a => a.login);\n\nreturn [{\n  json: {\n    action, repo, repoShort, repoListId, masterListId,\n    issueNumber: issue.number,\n    issueTitle: issue.title,\n    issueBody: issue.body || '',\n    issueState: issue.state,\n    issueUrl: issue.html_url,\n    issueLabels: (issue.labels || []).map(l => l.name),\n    commentBody: comment.body || '',\n    commentUser: comment.user ? comment.user.login : '',\n    senderLogin: body.sender ? body.sender.login : '',\n    assigneeLogin: assignee.login || '',\n    currentAssignees: currentAssignees\n  }\n}];\n"
+        "jsCode": "const body = $input.first().json.body;\nconst action = body.action;\n\nconst issue = body.issue || {};\nconst comment = body.comment || {};\n\nconst title = issue.title || '';\nconst issueBody = issue.body || '';\nconst commentBody = comment.body || '';\n\nif (title.includes('[sync]') || issueBody.includes('[sync]') || commentBody.includes('[sync]')) {\n  return [];\n}\n\nconst repo = body.repository ? body.repository.full_name : 'unknown';\nconst repoShort = body.repository ? body.repository.name : 'unknown';\n\nconst listMap = {\n  'enterprise': '901710789803',\n  'siege_utilities': '901710789806',\n  'rundeck': '901710789808',\n  'ops': '901710789809',\n  'portainer': '901710789810'\n};\n\nconst masterListId = '901710789811';\nconst repoListId = listMap[repoShort] || null;\nif (!repoListId) return [];\n\nconst assignee = body.assignee || {};\nconst currentAssignees = (issue.assignees || []).map(a => a.login);\n\nreturn [{\n  json: {\n    action, repo, repoShort, repoListId, masterListId,\n    issueNumber: issue.number,\n    issueTitle: issue.title,\n    issueBody: issue.body || '',\n    issueState: issue.state,\n    issueUrl: issue.html_url,\n    issueLabels: (issue.labels || []).map(l => l.name),\n    commentBody: comment.body || '',\n    commentUser: comment.user ? comment.user.login : '',\n    senderLogin: body.sender ? body.sender.login : '',\n    assigneeLogin: assignee.login || '',\n    currentAssignees: currentAssignees\n  }\n}];\n"
       },
       "name": "Anti-Loop & Parse",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [480, 300]
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.clickup.com/api/v2/list/{{ $json.repoListId }}/task?page=0&include_closed=true",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "Fetch Repo Tasks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [600, 300],
+      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.clickup.com/api/v2/list/901710789811/task?page=0&include_closed=true",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "Fetch Master Tasks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [780, 300],
+      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('Anti-Loop & Parse').first().json;\nconst repoTasks = $('Fetch Repo Tasks').first().json.tasks || [];\nconst masterTasks = $('Fetch Master Tasks').first().json.tasks || [];\n\nconst namePrefix = `[${data.repoShort}#${data.issueNumber}]`;\n\nlet repoTaskId = null;\nlet masterTaskId = null;\n\nfor (const t of repoTasks) {\n  if (t.name && t.name.startsWith(namePrefix)) {\n    repoTaskId = t.id;\n    break;\n  }\n}\nfor (const t of masterTasks) {\n  if (t.name && t.name.startsWith(namePrefix)) {\n    masterTaskId = t.id;\n    break;\n  }\n}\n\nreturn [{ json: { ...data, repoTaskId, masterTaskId } }];\n"
+      },
+      "name": "Resolve Task IDs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
     },
     {
       "parameters": {
@@ -34,24 +71,23 @@
             { "value2": "unlabeled" },
             { "value2": "created" },
             { "value2": "assigned" },
-            { "value2": "unassigned" },
-            { "value2": "rebuild-mappings" }
+            { "value2": "unassigned" }
           ]
         }
       },
       "name": "Route by Action",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 2,
-      "position": [720, 300]
+      "position": [1080, 300]
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.github_to_clickup) staticData.github_to_clickup = {};\nif (!staticData.clickup_to_github) staticData.clickup_to_github = {};\n\nconst mappingKey = `${data.repoShort}/${data.issueNumber}`;\nif (staticData.github_to_clickup[mappingKey]) {\n  return [{ json: { skipped: true, reason: 'already mapped', mappingKey } }];\n}\n\nconst ghToClickupUser = {\n  'dheerajchand': 95317754,\n  'steveblackmon': 192189161\n};\nconst assigneeIds = (data.currentAssignees || [])\n  .map(login => ghToClickupUser[login])\n  .filter(id => id !== undefined);\n\nreturn [{\n  json: {\n    ...data, mappingKey,\n    taskName: `[${data.repoShort}#${data.issueNumber}] ${data.issueTitle}`,\n    taskDescription: `[sync] Synced from GitHub: ${data.issueUrl}\\n\\n${data.issueBody}`,\n    tags: data.issueLabels,\n    assigneeIds: assigneeIds\n  }\n}];\n"
+        "jsCode": "const data = $input.first().json;\n\nif (data.repoTaskId) {\n  return [{ json: { skipped: true, reason: 'task already exists', repoTaskId: data.repoTaskId } }];\n}\n\nconst ghToClickupUser = {\n  'dheerajchand': 95317754,\n  'steveblackmon': 192189161\n};\nconst assigneeIds = (data.currentAssignees || [])\n  .map(login => ghToClickupUser[login])\n  .filter(id => id !== undefined);\n\nreturn [{\n  json: {\n    ...data,\n    taskName: `[${data.repoShort}#${data.issueNumber}] ${data.issueTitle}`,\n    taskDescription: `[sync] Synced from GitHub: ${data.issueUrl}\\n\\n${data.issueBody}`,\n    tags: data.issueLabels,\n    assigneeIds: assigneeIds\n  }\n}];\n"
       },
       "name": "Prepare Create",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [960, 60]
+      "position": [1320, 60]
     },
     {
       "parameters": {
@@ -67,7 +103,7 @@
       "name": "Create Repo Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1200, 0],
+      "position": [1560, 0],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
@@ -84,26 +120,17 @@
       "name": "Create Master Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1440, 0],
+      "position": [1800, 0],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
       "parameters": {
-        "jsCode": "const repoTask = $('Create Repo Task').first().json;\nconst masterTask = $('Create Master Task').first().json;\nconst prepData = $('Prepare Create').first().json;\n\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.github_to_clickup) staticData.github_to_clickup = {};\nif (!staticData.clickup_to_github) staticData.clickup_to_github = {};\n\nconst mappingKey = prepData.mappingKey;\nstaticData.github_to_clickup[mappingKey] = { repo_list: repoTask.id, master_list: masterTask.id };\nstaticData.clickup_to_github[repoTask.id] = mappingKey;\nstaticData.clickup_to_github[masterTask.id] = mappingKey;\n\nreturn [{ json: { success: true, mappingKey, repoTaskId: repoTask.id, masterTaskId: masterTask.id } }];\n"
-      },
-      "name": "Save Mapping",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1680, 0]
-    },
-    {
-      "parameters": {
-        "jsCode": "const data = $input.first().json;\nconst staticData = $getWorkflowStaticData('global');\nconst mapping = (staticData.github_to_clickup || {})[`${data.repoShort}/${data.issueNumber}`];\nif (!mapping) return [{ json: { skipped: true, reason: 'no mapping' } }];\n\nreturn [{ json: { repoTaskId: mapping.repo_list, masterTaskId: mapping.master_list, status: 'shipped' } }];\n"
+        "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [{ json: { skipped: true, reason: 'task not found' } }];\nreturn [{ json: { repoTaskId: data.repoTaskId, masterTaskId: data.masterTaskId, status: 'shipped' } }];\n"
       },
       "name": "Prepare Close",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [960, 260]
+      "position": [1320, 260]
     },
     {
       "parameters": {
@@ -119,7 +146,7 @@
       "name": "Close Repo Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1200, 240],
+      "position": [1560, 240],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
@@ -136,17 +163,17 @@
       "name": "Close Master Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1440, 260],
+      "position": [1800, 260],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nconst staticData = $getWorkflowStaticData('global');\nconst mapping = (staticData.github_to_clickup || {})[`${data.repoShort}/${data.issueNumber}`];\nif (!mapping) return [{ json: { skipped: true, reason: 'no mapping' } }];\n\nreturn [{ json: { repoTaskId: mapping.repo_list, masterTaskId: mapping.master_list, status: 'backlog' } }];\n"
+        "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [{ json: { skipped: true, reason: 'task not found' } }];\nreturn [{ json: { repoTaskId: data.repoTaskId, masterTaskId: data.masterTaskId, status: 'backlog' } }];\n"
       },
       "name": "Prepare Reopen",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [960, 440]
+      "position": [1320, 440]
     },
     {
       "parameters": {
@@ -162,7 +189,7 @@
       "name": "Reopen Repo Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1200, 420],
+      "position": [1560, 420],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
@@ -179,17 +206,17 @@
       "name": "Reopen Master Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1440, 440],
+      "position": [1800, 440],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nconst staticData = $getWorkflowStaticData('global');\nconst mapping = (staticData.github_to_clickup || {})[`${data.repoShort}/${data.issueNumber}`];\nif (!mapping) return [{ json: { skipped: true, reason: 'no mapping' } }];\n\nconst labelToStatus = {\n  'status:scoping': 'scoping',\n  'status:in-design': 'in design',\n  'status:ready': 'ready for development',\n  'status:in-progress': 'in development',\n  'status:in-review': 'in review',\n  'status:testing': 'testing'\n};\n\nconst statusLabels = data.issueLabels.filter(l => l.startsWith('status:'));\nlet clickupStatus = 'backlog';\nif (statusLabels.length > 0) {\n  clickupStatus = labelToStatus[statusLabels[statusLabels.length - 1]] || 'backlog';\n}\n\nreturn [{ json: { repoTaskId: mapping.repo_list, masterTaskId: mapping.master_list, status: clickupStatus } }];\n"
+        "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [{ json: { skipped: true, reason: 'task not found' } }];\n\nconst labelToStatus = {\n  'status:scoping': 'scoping',\n  'status:in-design': 'in design',\n  'status:ready': 'ready for development',\n  'status:in-progress': 'in development',\n  'status:in-review': 'in review',\n  'status:testing': 'testing'\n};\n\nconst statusLabels = data.issueLabels.filter(l => l.startsWith('status:'));\nlet clickupStatus = 'backlog';\nif (statusLabels.length > 0) {\n  clickupStatus = labelToStatus[statusLabels[statusLabels.length - 1]] || 'backlog';\n}\n\nreturn [{ json: { repoTaskId: data.repoTaskId, masterTaskId: data.masterTaskId, status: clickupStatus } }];\n"
       },
       "name": "Prepare Label Update",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [960, 620]
+      "position": [1320, 620]
     },
     {
       "parameters": {
@@ -205,7 +232,7 @@
       "name": "Update Repo Status",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1200, 600],
+      "position": [1560, 600],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
@@ -222,17 +249,17 @@
       "name": "Update Master Status",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1440, 620],
+      "position": [1800, 620],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nconst staticData = $getWorkflowStaticData('global');\nconst mapping = (staticData.github_to_clickup || {})[`${data.repoShort}/${data.issueNumber}`];\nif (!mapping) return [{ json: { skipped: true, reason: 'no mapping' } }];\n\nconst commentText = `[sync] Synced from GitHub (${data.commentUser}):\\n\\n${data.commentBody}`;\nreturn [{ json: { repoTaskId: mapping.repo_list, masterTaskId: mapping.master_list, commentText } }];\n"
+        "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [{ json: { skipped: true, reason: 'task not found' } }];\n\nconst commentText = `[sync] Synced from GitHub (${data.commentUser}):\\n\\n${data.commentBody}`;\nreturn [{ json: { repoTaskId: data.repoTaskId, masterTaskId: data.masterTaskId, commentText } }];\n"
       },
       "name": "Prepare Comment",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [960, 800]
+      "position": [1320, 800]
     },
     {
       "parameters": {
@@ -248,7 +275,7 @@
       "name": "Comment Repo Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1200, 780],
+      "position": [1560, 780],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
@@ -265,17 +292,17 @@
       "name": "Comment Master Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1440, 800],
+      "position": [1800, 800],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nconst staticData = $getWorkflowStaticData('global');\nconst mapping = (staticData.github_to_clickup || {})[`${data.repoShort}/${data.issueNumber}`];\nif (!mapping) return [{ json: { skipped: true, reason: 'no mapping' } }];\n\nconst ghToClickupUser = {\n  'dheerajchand': 95317754,\n  'steveblackmon': 192189161\n};\n\nconst clickupUserId = ghToClickupUser[data.assigneeLogin];\nif (!clickupUserId) return [{ json: { skipped: true, reason: 'unknown assignee', login: data.assigneeLogin } }];\n\nlet assigneePayload;\nif (data.action === 'assigned') {\n  assigneePayload = { assignees: { add: [clickupUserId], rem: [] } };\n} else {\n  assigneePayload = { assignees: { add: [], rem: [clickupUserId] } };\n}\n\nreturn [{\n  json: {\n    repoTaskId: mapping.repo_list,\n    masterTaskId: mapping.master_list,\n    assigneePayload: assigneePayload\n  }\n}];\n"
+        "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [{ json: { skipped: true, reason: 'task not found' } }];\n\nconst ghToClickupUser = {\n  'dheerajchand': 95317754,\n  'steveblackmon': 192189161\n};\n\nconst clickupUserId = ghToClickupUser[data.assigneeLogin];\nif (!clickupUserId) return [{ json: { skipped: true, reason: 'unknown assignee', login: data.assigneeLogin } }];\n\nlet assigneePayload;\nif (data.action === 'assigned') {\n  assigneePayload = { assignees: { add: [clickupUserId], rem: [] } };\n} else {\n  assigneePayload = { assignees: { add: [], rem: [clickupUserId] } };\n}\n\nreturn [{\n  json: {\n    repoTaskId: data.repoTaskId,\n    masterTaskId: data.masterTaskId,\n    assigneePayload: assigneePayload\n  }\n}];\n"
       },
       "name": "Prepare Assignee Update",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [960, 980]
+      "position": [1320, 980]
     },
     {
       "parameters": {
@@ -291,7 +318,7 @@
       "name": "Update Repo Assignees",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1200, 960],
+      "position": [1560, 960],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
@@ -308,17 +335,8 @@
       "name": "Update Master Assignees",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1440, 980],
+      "position": [1800, 980],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
-    },
-    {
-      "parameters": {
-        "jsCode": "const data = $input.first().json;\nconst staticData = $getWorkflowStaticData('global');\n\nif (!data || !data.github_to_clickup || !data.clickup_to_github) {\n  return [{ json: { success: false, error: 'Invalid payload: must contain github_to_clickup and clickup_to_github objects' } }];\n}\n\nconst g2c = JSON.parse(JSON.stringify(data.github_to_clickup));\nconst c2g = JSON.parse(JSON.stringify(data.clickup_to_github));\n\nif (!staticData.github_to_clickup) staticData.github_to_clickup = {};\nif (!staticData.clickup_to_github) staticData.clickup_to_github = {};\n\nfor (const [key, val] of Object.entries(g2c)) {\n  staticData.github_to_clickup[key] = val;\n}\nfor (const [key, val] of Object.entries(c2g)) {\n  staticData.clickup_to_github[key] = val;\n}\n\nconst ghCount = Object.keys(staticData.github_to_clickup).length;\nconst cuCount = Object.keys(staticData.clickup_to_github).length;\n\nreturn [{ json: { success: true, github_to_clickup_count: ghCount, clickup_to_github_count: cuCount } }];\n"
-      },
-      "name": "Save Rebuilt Mappings",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [480, 1160]
     }
   ],
   "connections": {
@@ -326,6 +344,15 @@
       "main": [[{ "node": "Anti-Loop & Parse", "type": "main", "index": 0 }]]
     },
     "Anti-Loop & Parse": {
+      "main": [[{ "node": "Fetch Repo Tasks", "type": "main", "index": 0 }]]
+    },
+    "Fetch Repo Tasks": {
+      "main": [[{ "node": "Fetch Master Tasks", "type": "main", "index": 0 }]]
+    },
+    "Fetch Master Tasks": {
+      "main": [[{ "node": "Resolve Task IDs", "type": "main", "index": 0 }]]
+    },
+    "Resolve Task IDs": {
       "main": [[{ "node": "Route by Action", "type": "main", "index": 0 }]]
     },
     "Route by Action": {
@@ -337,8 +364,7 @@
         [{ "node": "Prepare Label Update", "type": "main", "index": 0 }],
         [{ "node": "Prepare Comment", "type": "main", "index": 0 }],
         [{ "node": "Prepare Assignee Update", "type": "main", "index": 0 }],
-        [{ "node": "Prepare Assignee Update", "type": "main", "index": 0 }],
-        [{ "node": "Save Rebuilt Mappings", "type": "main", "index": 0 }]
+        [{ "node": "Prepare Assignee Update", "type": "main", "index": 0 }]
       ]
     },
     "Prepare Create": {
@@ -346,9 +372,6 @@
     },
     "Create Repo Task": {
       "main": [[{ "node": "Create Master Task", "type": "main", "index": 0 }]]
-    },
-    "Create Master Task": {
-      "main": [[{ "node": "Save Mapping", "type": "main", "index": 0 }]]
     },
     "Prepare Close": {
       "main": [[{ "node": "Close Repo Task", "type": "main", "index": 0 }]]
