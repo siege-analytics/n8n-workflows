@@ -50,9 +50,9 @@
         "value1": "={{ $json.action }}",
         "rules": {
           "rules": [
-            { "value2": "status_changed", "output": 0 },
-            { "value2": "comment", "output": 1 },
-            { "value2": "assignee_changed", "output": 2 }
+            { "value2": "status_changed" },
+            { "value2": "comment" },
+            { "value2": "assignee_changed" }
           ]
         }
       },

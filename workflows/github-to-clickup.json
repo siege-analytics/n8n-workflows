@@ -27,14 +27,14 @@
         "value1": "={{ $json.action }}",
         "rules": {
           "rules": [
-            { "value2": "opened", "output": 0 },
-            { "value2": "closed", "output": 1 },
-            { "value2": "reopened", "output": 2 },
-            { "value2": "labeled", "output": 3 },
-            { "value2": "unlabeled", "output": 3 },
-            { "value2": "created", "output": 4 },
-            { "value2": "assigned", "output": 5 },
-            { "value2": "unassigned", "output": 5 }
+            { "value2": "opened" },
+            { "value2": "closed" },
+            { "value2": "reopened" },
+            { "value2": "labeled" },
+            { "value2": "unlabeled" },
+            { "value2": "created" },
+            { "value2": "assigned" },
+            { "value2": "unassigned" }
           ]
         }
       },
@@ -344,7 +344,9 @@
         [{ "node": "Prepare Close", "type": "main", "index": 0 }],
         [{ "node": "Prepare Reopen", "type": "main", "index": 0 }],
         [{ "node": "Prepare Label Update", "type": "main", "index": 0 }],
+        [{ "node": "Prepare Label Update", "type": "main", "index": 0 }],
         [{ "node": "Prepare Comment", "type": "main", "index": 0 }],
+        [{ "node": "Prepare Assignee Update", "type": "main", "index": 0 }],
         [{ "node": "Prepare Assignee Update", "type": "main", "index": 0 }]
       ]
     },
