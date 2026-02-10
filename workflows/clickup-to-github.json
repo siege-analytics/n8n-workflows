@@ -23,12 +23,26 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.clickup_to_github) staticData.clickup_to_github = {};\n\nconst mappingKey = staticData.clickup_to_github[data.taskId];\nif (!mappingKey) {\n  if (data.action === 'created') return [{ json: { ...data, mapped: false, action: 'create_on_github' } }];\n  return [];\n}\n\nconst parts = mappingKey.split('/');\nconst repoShort = parts[0];\nconst issueNumber = parseInt(parts[1]);\n\nconst repoMap = {\n  'enterprise': 'electinfo/enterprise',\n  'siege_utilities': 'siege-analytics/siege_utilities',\n  'rundeck': 'electinfo/rundeck',\n  'ops': 'electinfo/ops',\n  'portainer': 'electinfo/portainer'\n};\n\nconst fullRepo = repoMap[repoShort] || null;\nif (!fullRepo) return [];\n\nreturn [{ json: { ...data, mapped: true, repoShort, fullRepo, issueNumber } }];\n"
+        "method": "GET",
+        "url": "=https://api.clickup.com/api/v2/task/{{ $json.taskId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "Fetch Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 300],
+      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const task = $input.first().json;\nconst prevData = $('Anti-Loop & Parse').first().json;\n\nconst taskName = task.name || '';\nconst match = taskName.match(/^\\[([^#]+)#(\\d+)\\]/);\nif (!match) return [];\n\nconst repoShort = match[1];\nconst issueNumber = parseInt(match[2]);\n\nconst repoMap = {\n  'enterprise': 'electinfo/enterprise',\n  'siege_utilities': 'siege-analytics/siege_utilities',\n  'rundeck': 'electinfo/rundeck',\n  'ops': 'electinfo/ops',\n  'portainer': 'electinfo/portainer'\n};\n\nconst fullRepo = repoMap[repoShort] || null;\nif (!fullRepo) return [];\n\nreturn [{ json: { ...prevData, mapped: true, repoShort, fullRepo, issueNumber } }];\n"
       },
       "name": "Lookup Mapping",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [720, 300]
+      "position": [960, 300]
     },
     {
       "parameters": {
@@ -44,7 +58,7 @@
       "name": "Route by Action",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 2,
-      "position": [960, 300]
+      "position": [1200, 300]
     },
     {
       "parameters": {
@@ -53,7 +67,7 @@
       "name": "Map Status",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1200, 200]
+      "position": [1440, 200]
     },
     {
       "parameters": {
@@ -62,7 +76,7 @@
       "name": "Build GitHub Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1440, 140]
+      "position": [1680, 140]
     },
     {
       "parameters": {
@@ -78,7 +92,7 @@
       "name": "GitHub API Call",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1680, 140],
+      "position": [1920, 140],
       "credentials": { "httpHeaderAuth": { "id": "SbQTxL2kanI77ymm", "name": "GitHub API" } }
     },
     {
@@ -88,7 +102,7 @@
       "name": "Prepare Label Change",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1440, 300]
+      "position": [1680, 300]
     },
     {
       "parameters": {
@@ -104,7 +118,7 @@
       "name": "Add Label",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1680, 300],
+      "position": [1920, 300],
       "credentials": { "httpHeaderAuth": { "id": "SbQTxL2kanI77ymm", "name": "GitHub API" } }
     },
     {
@@ -118,7 +132,7 @@
       "name": "Remove Old Label",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1920, 300],
+      "position": [2160, 300],
       "credentials": { "httpHeaderAuth": { "id": "SbQTxL2kanI77ymm", "name": "GitHub API" } }
     },
     {
@@ -128,7 +142,7 @@
       "name": "Prepare Comment",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1200, 440]
+      "position": [1440, 440]
     },
     {
       "parameters": {
@@ -144,7 +158,7 @@
       "name": "Post GitHub Comment",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1440, 440],
+      "position": [1680, 440],
       "credentials": { "httpHeaderAuth": { "id": "SbQTxL2kanI77ymm", "name": "GitHub API" } }
     }
   ],
@@ -153,6 +167,9 @@
       "main": [[{ "node": "Anti-Loop & Parse", "type": "main", "index": 0 }]]
     },
     "Anti-Loop & Parse": {
+      "main": [[{ "node": "Fetch Task", "type": "main", "index": 0 }]]
+    },
+    "Fetch Task": {
       "main": [[{ "node": "Lookup Mapping", "type": "main", "index": 0 }]]
     },
     "Lookup Mapping": {
