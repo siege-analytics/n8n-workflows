@@ -1,0 +1,185 @@
+{
+  "name": "ClickUp → GitHub Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "clickup-to-github",
+        "options": {}
+      },
+      "name": "ClickUp Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body;\nconst event = body.event;\nconst taskId = body.task_id || (body.history_items && body.history_items[0] ? body.history_items[0].parent_id : null);\n\nconst historyItems = body.history_items || [];\nfor (const item of historyItems) {\n  if (item.comment && item.comment.text_content && item.comment.text_content.includes('[sync]')) {\n    return [];\n  }\n}\n\nlet action = 'unknown';\nif (event === 'taskCreated') action = 'created';\nelse if (event === 'taskUpdated') action = 'updated';\nelse if (event === 'taskStatusUpdated') action = 'status_changed';\nelse if (event === 'taskCommentPosted') action = 'comment';\nelse return [];\n\nlet newStatus = null;\nlet oldStatus = null;\nfor (const item of historyItems) {\n  if (item.field === 'status') {\n    newStatus = item.after ? item.after.status : null;\n    oldStatus = item.before ? item.before.status : null;\n  }\n}\n\nlet commentText = '';\nfor (const item of historyItems) {\n  if (item.comment && item.comment.text_content) {\n    commentText = item.comment.text_content;\n  }\n}\n\nreturn [{ json: { event, action, taskId, newStatus, oldStatus, commentText, webhookId: body.webhook_id } }];\n"
+      },
+      "name": "Anti-Loop & Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.clickup_to_github) staticData.clickup_to_github = {};\n\nconst mappingKey = staticData.clickup_to_github[data.taskId];\nif (!mappingKey) {\n  if (data.action === 'created') return [{ json: { ...data, mapped: false, action: 'create_on_github' } }];\n  return [];\n}\n\nconst parts = mappingKey.split('/');\nconst repoShort = parts[0];\nconst issueNumber = parseInt(parts[1]);\n\nconst repoMap = {\n  'enterprise': 'electinfo/enterprise',\n  'siege_utilities': 'siege-analytics/siege_utilities',\n  'rundeck': 'electinfo/rundeck',\n  'ops': 'electinfo/ops',\n  'portainer': 'electinfo/portainer'\n};\n\nconst fullRepo = repoMap[repoShort] || null;\nif (!fullRepo) return [];\n\nreturn [{ json: { ...data, mapped: true, repoShort, fullRepo, issueNumber } }];\n"
+      },
+      "name": "Lookup Mapping",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.action }}",
+        "rules": {
+          "rules": [
+            { "value2": "status_changed", "output": 0 },
+            { "value2": "comment", "output": 1 }
+          ]
+        }
+      },
+      "name": "Route by Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nconst statusToLabel = {\n  'scoping': 'status:scoping',\n  'in design': 'status:in-design',\n  'ready for development': 'status:ready',\n  'in development': 'status:in-progress',\n  'in review': 'status:in-review',\n  'testing': 'status:testing'\n};\n\nconst closedStatuses = ['shipped', 'cancelled'];\nconst openStatuses = ['backlog', 'scoping', 'in design', 'ready for development', 'in development', 'in review', 'testing'];\n\nconst newStatus = data.newStatus ? data.newStatus.toLowerCase() : '';\nconst oldStatus = data.oldStatus ? data.oldStatus.toLowerCase() : '';\n\nlet githubAction = 'label';\nlet closeReason = null;\nlet newLabel = statusToLabel[newStatus] || null;\nlet oldLabel = statusToLabel[oldStatus] || null;\n\nif (closedStatuses.includes(newStatus)) {\n  githubAction = 'close';\n  closeReason = newStatus === 'cancelled' ? 'not_planned' : 'completed';\n} else if (closedStatuses.includes(oldStatus) && openStatuses.includes(newStatus)) {\n  githubAction = 'reopen';\n}\n\nreturn [{ json: { ...data, githubAction, closeReason, newLabel, oldLabel } }];\n"
+      },
+      "name": "Map Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nif (!data.mapped || !data.fullRepo || !data.issueNumber) return [{ json: { skipped: true } }];\n\nlet body = {};\nif (data.githubAction === 'close') body = { state: 'closed', state_reason: data.closeReason || 'completed' };\nelse if (data.githubAction === 'reopen') body = { state: 'open' };\nelse body = null;\n\nreturn [{ json: { ...data, apiUrl: `https://api.github.com/repos/${data.fullRepo}/issues/${data.issueNumber}`, apiBody: body } }];\n"
+      },
+      "name": "Build GitHub Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1440, 140]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $json.apiUrl }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.apiBody) }}",
+        "options": {}
+      },
+      "name": "GitHub API Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 140],
+      "credentials": { "httpHeaderAuth": { "id": "SbQTxL2kanI77ymm", "name": "GitHub API" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nif (!data.mapped || data.githubAction !== 'label' || !data.newLabel) return [{ json: { skipped: true } }];\nreturn [{ json: { fullRepo: data.fullRepo, issueNumber: data.issueNumber, addLabel: data.newLabel, removeLabel: data.oldLabel } }];\n"
+      },
+      "name": "Prepare Label Change",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1440, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.github.com/repos/{{ $json.fullRepo }}/issues/{{ $json.issueNumber }}/labels",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({labels: [$json.addLabel]}) }}",
+        "options": {}
+      },
+      "name": "Add Label",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 300],
+      "credentials": { "httpHeaderAuth": { "id": "SbQTxL2kanI77ymm", "name": "GitHub API" } }
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "=https://api.github.com/repos/{{ $('Prepare Label Change').item.json.fullRepo }}/issues/{{ $('Prepare Label Change').item.json.issueNumber }}/labels/{{ encodeURIComponent($('Prepare Label Change').item.json.removeLabel) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "Remove Old Label",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1920, 300],
+      "credentials": { "httpHeaderAuth": { "id": "SbQTxL2kanI77ymm", "name": "GitHub API" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nif (!data.mapped || !data.fullRepo || !data.issueNumber) return [{ json: { skipped: true } }];\n\nconst commentBody = `[sync] Synced from ClickUp:\\n\\n${data.commentText}`;\nreturn [{ json: { fullRepo: data.fullRepo, issueNumber: data.issueNumber, commentBody } }];\n"
+      },
+      "name": "Prepare Comment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 440]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.github.com/repos/{{ $json.fullRepo }}/issues/{{ $json.issueNumber }}/comments",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({body: $json.commentBody}) }}",
+        "options": {}
+      },
+      "name": "Post GitHub Comment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 440],
+      "credentials": { "httpHeaderAuth": { "id": "SbQTxL2kanI77ymm", "name": "GitHub API" } }
+    }
+  ],
+  "connections": {
+    "ClickUp Webhook": {
+      "main": [[{ "node": "Anti-Loop & Parse", "type": "main", "index": 0 }]]
+    },
+    "Anti-Loop & Parse": {
+      "main": [[{ "node": "Lookup Mapping", "type": "main", "index": 0 }]]
+    },
+    "Lookup Mapping": {
+      "main": [[{ "node": "Route by Action", "type": "main", "index": 0 }]]
+    },
+    "Route by Action": {
+      "main": [
+        [{ "node": "Map Status", "type": "main", "index": 0 }],
+        [{ "node": "Prepare Comment", "type": "main", "index": 0 }]
+      ]
+    },
+    "Map Status": {
+      "main": [[{ "node": "Build GitHub Request", "type": "main", "index": 0 }, { "node": "Prepare Label Change", "type": "main", "index": 0 }]]
+    },
+    "Build GitHub Request": {
+      "main": [[{ "node": "GitHub API Call", "type": "main", "index": 0 }]]
+    },
+    "Prepare Label Change": {
+      "main": [[{ "node": "Add Label", "type": "main", "index": 0 }]]
+    },
+    "Add Label": {
+      "main": [[{ "node": "Remove Old Label", "type": "main", "index": 0 }]]
+    },
+    "Prepare Comment": {
+      "main": [[{ "node": "Post GitHub Comment", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "meta": { "templateCredsSetupCompleted": true }
+}
