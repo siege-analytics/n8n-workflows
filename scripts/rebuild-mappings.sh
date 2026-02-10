@@ -10,7 +10,7 @@
 
 set -uo pipefail
 
-REBUILD_URL="https://n8n.elect.info/webhook/rebuild-mappings"
+REBUILD_URL="https://n8n.elect.info/webhook/github-to-clickup"
 DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
@@ -133,7 +133,7 @@ done
 PAYLOAD=$(jq -n \
   --argjson g2c "$GH_TO_CU" \
   --argjson c2g "$CU_TO_GH" \
-  '{github_to_clickup: $g2c, clickup_to_github: $c2g}')
+  '{action: "rebuild-mappings", github_to_clickup: $g2c, clickup_to_github: $c2g}')
 
 gh_count=$(echo "$GH_TO_CU" | jq 'length')
 cu_count=$(echo "$CU_TO_GH" | jq 'length')

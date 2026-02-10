@@ -14,7 +14,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.first().json.body;\nconst action = body.action;\nconst issue = body.issue || {};\nconst comment = body.comment || {};\n\nconst title = issue.title || '';\nconst issueBody = issue.body || '';\nconst commentBody = comment.body || '';\n\nif (title.includes('[sync]') || issueBody.includes('[sync]') || commentBody.includes('[sync]')) {\n  return [];\n}\n\nconst repo = body.repository ? body.repository.full_name : 'unknown';\nconst repoShort = body.repository ? body.repository.name : 'unknown';\n\nconst listMap = {\n  'enterprise': '901710789803',\n  'siege_utilities': '901710789806',\n  'rundeck': '901710789808',\n  'ops': '901710789809',\n  'portainer': '901710789810'\n};\n\nconst masterListId = '901710789811';\nconst repoListId = listMap[repoShort] || null;\nif (!repoListId) return [];\n\nconst assignee = body.assignee || {};\nconst currentAssignees = (issue.assignees || []).map(a => a.login);\n\nreturn [{\n  json: {\n    action, repo, repoShort, repoListId, masterListId,\n    issueNumber: issue.number,\n    issueTitle: issue.title,\n    issueBody: issue.body || '',\n    issueState: issue.state,\n    issueUrl: issue.html_url,\n    issueLabels: (issue.labels || []).map(l => l.name),\n    commentBody: comment.body || '',\n    commentUser: comment.user ? comment.user.login : '',\n    senderLogin: body.sender ? body.sender.login : '',\n    assigneeLogin: assignee.login || '',\n    currentAssignees: currentAssignees\n  }\n}];\n"
+        "jsCode": "const body = $input.first().json.body;\nconst action = body.action;\n\nif (action === 'rebuild-mappings') {\n  return [{ json: { action: 'rebuild-mappings', github_to_clickup: body.github_to_clickup, clickup_to_github: body.clickup_to_github } }];\n}\n\nconst issue = body.issue || {};\nconst comment = body.comment || {};\n\nconst title = issue.title || '';\nconst issueBody = issue.body || '';\nconst commentBody = comment.body || '';\n\nif (title.includes('[sync]') || issueBody.includes('[sync]') || commentBody.includes('[sync]')) {\n  return [];\n}\n\nconst repo = body.repository ? body.repository.full_name : 'unknown';\nconst repoShort = body.repository ? body.repository.name : 'unknown';\n\nconst listMap = {\n  'enterprise': '901710789803',\n  'siege_utilities': '901710789806',\n  'rundeck': '901710789808',\n  'ops': '901710789809',\n  'portainer': '901710789810'\n};\n\nconst masterListId = '901710789811';\nconst repoListId = listMap[repoShort] || null;\nif (!repoListId) return [];\n\nconst assignee = body.assignee || {};\nconst currentAssignees = (issue.assignees || []).map(a => a.login);\n\nreturn [{\n  json: {\n    action, repo, repoShort, repoListId, masterListId,\n    issueNumber: issue.number,\n    issueTitle: issue.title,\n    issueBody: issue.body || '',\n    issueState: issue.state,\n    issueUrl: issue.html_url,\n    issueLabels: (issue.labels || []).map(l => l.name),\n    commentBody: comment.body || '',\n    commentUser: comment.user ? comment.user.login : '',\n    senderLogin: body.sender ? body.sender.login : '',\n    assigneeLogin: assignee.login || '',\n    currentAssignees: currentAssignees\n  }\n}];\n"
       },
       "name": "Anti-Loop & Parse",
       "type": "n8n-nodes-base.code",
@@ -34,7 +34,8 @@
             { "value2": "unlabeled" },
             { "value2": "created" },
             { "value2": "assigned" },
-            { "value2": "unassigned" }
+            { "value2": "unassigned" },
+            { "value2": "rebuild-mappings" }
           ]
         }
       },
@@ -312,18 +313,7 @@
     },
     {
       "parameters": {
-        "httpMethod": "POST",
-        "path": "rebuild-mappings",
-        "options": {}
-      },
-      "name": "Rebuild Mapping Webhook",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [240, 1160]
-    },
-    {
-      "parameters": {
-        "jsCode": "const body = $input.first().json.body;\nconst staticData = $getWorkflowStaticData('global');\n\nif (!body || !body.github_to_clickup || !body.clickup_to_github) {\n  return [{ json: { success: false, error: 'Invalid payload: must contain github_to_clickup and clickup_to_github objects' } }];\n}\n\nstaticData.github_to_clickup = body.github_to_clickup;\nstaticData.clickup_to_github = body.clickup_to_github;\n\nconst ghCount = Object.keys(body.github_to_clickup).length;\nconst cuCount = Object.keys(body.clickup_to_github).length;\n\nreturn [{ json: { success: true, github_to_clickup_count: ghCount, clickup_to_github_count: cuCount } }];\n"
+        "jsCode": "const data = $input.first().json;\nconst staticData = $getWorkflowStaticData('global');\n\nif (!data || !data.github_to_clickup || !data.clickup_to_github) {\n  return [{ json: { success: false, error: 'Invalid payload: must contain github_to_clickup and clickup_to_github objects' } }];\n}\n\nstaticData.github_to_clickup = data.github_to_clickup;\nstaticData.clickup_to_github = data.clickup_to_github;\n\nconst ghCount = Object.keys(data.github_to_clickup).length;\nconst cuCount = Object.keys(data.clickup_to_github).length;\n\nreturn [{ json: { success: true, github_to_clickup_count: ghCount, clickup_to_github_count: cuCount } }];\n"
       },
       "name": "Save Rebuilt Mappings",
       "type": "n8n-nodes-base.code",
@@ -347,7 +337,8 @@
         [{ "node": "Prepare Label Update", "type": "main", "index": 0 }],
         [{ "node": "Prepare Comment", "type": "main", "index": 0 }],
         [{ "node": "Prepare Assignee Update", "type": "main", "index": 0 }],
-        [{ "node": "Prepare Assignee Update", "type": "main", "index": 0 }]
+        [{ "node": "Prepare Assignee Update", "type": "main", "index": 0 }],
+        [{ "node": "Save Rebuilt Mappings", "type": "main", "index": 0 }]
       ]
     },
     "Prepare Create": {
@@ -388,9 +379,6 @@
     },
     "Update Repo Assignees": {
       "main": [[{ "node": "Update Master Assignees", "type": "main", "index": 0 }]]
-    },
-    "Rebuild Mapping Webhook": {
-      "main": [[{ "node": "Save Rebuilt Mappings", "type": "main", "index": 0 }]]
     }
   },
   "settings": { "executionOrder": "v1" },

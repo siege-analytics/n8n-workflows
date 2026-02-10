@@ -201,7 +201,7 @@ export CLICKUP_TOKEN="pk_..."
 ./scripts/rebuild-mappings.sh
 ```
 
-This fetches all ClickUp tasks, parses their names, and POSTs the mapping to the workflow's rebuild webhook (`/webhook/rebuild-mappings`).
+This fetches all ClickUp tasks, parses their names, and POSTs the mapping to the main workflow webhook (`/webhook/github-to-clickup`) with `action: rebuild-mappings`. The rebuild data flows through the same webhook trigger as normal events so it shares the same static data scope.
 
 ## Step 9: End-to-End Test
 
