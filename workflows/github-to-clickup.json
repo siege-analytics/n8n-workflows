@@ -138,7 +138,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\n\nif (data.repoTaskId) {\n  return [{ json: { skipped: true, reason: 'task already exists', repoTaskId: data.repoTaskId } }];\n}\n\nconst ghToClickupUser = {\n  'dheerajchand': 95317754,\n  'steveblackmon': 192189161\n};\nconst assigneeIds = (data.currentAssignees || [])\n  .map(login => ghToClickupUser[login])\n  .filter(id => id !== undefined);\n\nreturn [{\n  json: {\n    ...data,\n    taskName: `[${data.repoShort}#${data.issueNumber}] ${data.issueTitle}`,\n    taskDescription: `[sync] Synced from GitHub: ${data.issueUrl}\\n\\n${data.issueBody}`,\n    tags: data.issueLabels,\n    assigneeIds: assigneeIds\n  }\n}];\n"
+        "jsCode": "const data = $input.first().json;\n\nif (data.repoTaskId) return [];\n\nconst ghToClickupUser = {\n  'dheerajchand': 95317754,\n  'steveblackmon': 192189161\n};\nconst assigneeIds = (data.currentAssignees || [])\n  .map(login => ghToClickupUser[login])\n  .filter(id => id !== undefined);\n\nreturn [{\n  json: {\n    ...data,\n    taskName: `[${data.repoShort}#${data.issueNumber}] ${data.issueTitle}`,\n    taskDescription: `[sync] Synced from GitHub: ${data.issueUrl}\\n\\n${data.issueBody}`,\n    tags: data.issueLabels,\n    assigneeIds: assigneeIds\n  }\n}];\n"
       },
       "name": "Prepare Create",
       "type": "n8n-nodes-base.code",
