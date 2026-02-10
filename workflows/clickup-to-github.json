@@ -134,6 +134,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [2160, 300],
+      "onError": "continueRegularOutput",
       "credentials": { "httpHeaderAuth": { "id": "SbQTxL2kanI77ymm", "name": "GitHub API" } }
     },
     {
