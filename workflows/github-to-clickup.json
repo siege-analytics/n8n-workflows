@@ -14,7 +14,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.first().json.body;\nconst action = body.action;\n\nconst issue = body.issue || {};\nconst comment = body.comment || {};\n\nconst title = issue.title || '';\nconst issueBody = issue.body || '';\nconst commentBody = comment.body || '';\n\nif (title.includes('[sync]') || issueBody.includes('[sync]') || commentBody.includes('[sync]')) {\n  return [];\n}\n\nconst repo = body.repository ? body.repository.full_name : 'unknown';\nconst repoShort = body.repository ? body.repository.name : 'unknown';\n\nconst listMap = {\n  'enterprise': '901710789803',\n  'siege_utilities': '901710789806',\n  'rundeck': '901710789808',\n  'ops': '901710789809',\n  'portainer': '901710789810'\n};\n\nconst masterListId = '901710789811';\nconst repoListId = listMap[repoShort] || null;\nif (!repoListId) return [];\n\nconst assignee = body.assignee || {};\nconst currentAssignees = (issue.assignees || []).map(a => a.login);\n\nreturn [{\n  json: {\n    action, repo, repoShort, repoListId, masterListId,\n    issueNumber: issue.number,\n    issueTitle: issue.title,\n    issueBody: issue.body || '',\n    issueState: issue.state,\n    issueUrl: issue.html_url,\n    issueLabels: (issue.labels || []).map(l => l.name),\n    commentBody: comment.body || '',\n    commentUser: comment.user ? comment.user.login : '',\n    senderLogin: body.sender ? body.sender.login : '',\n    assigneeLogin: assignee.login || '',\n    currentAssignees: currentAssignees\n  }\n}];\n"
+        "jsCode": "const body = $input.first().json.body;\nconst action = body.action;\n\nconst issue = body.issue || {};\nconst comment = body.comment || {};\n\nconst title = issue.title || '';\nconst issueBody = issue.body || '';\nconst commentBody = comment.body || '';\n\nif (title.includes('[sync]') || issueBody.includes('[sync]') || commentBody.includes('[sync]')) {\n  return [];\n}\n\nconst repo = body.repository ? body.repository.full_name : 'unknown';\nconst repoShort = body.repository ? body.repository.name : 'unknown';\n\nconst listMap = {\n  'enterprise': '901710789803',\n  'siege_utilities': '901710789806',\n  'rundeck': '901710789808',\n  'ops': '901710789809'\n};\n\nconst repoListId = listMap[repoShort] || null;\nif (!repoListId) return [];\n\nconst assignee = body.assignee || {};\nconst currentAssignees = (issue.assignees || []).map(a => a.login);\nconst milestone = issue.milestone || null;\n\nreturn [{\n  json: {\n    action, repo, repoShort, repoListId,\n    issueNumber: issue.number,\n    issueTitle: issue.title,\n    issueBody: issue.body || '',\n    issueState: issue.state,\n    issueUrl: issue.html_url,\n    issueLabels: (issue.labels || []).map(l => l.name),\n    milestoneName: milestone ? milestone.title : null,\n    commentBody: comment.body || '',\n    commentUser: comment.user ? comment.user.login : '',\n    senderLogin: body.sender ? body.sender.login : '',\n    assigneeLogin: assignee.login || '',\n    currentAssignees: currentAssignees\n  }\n}];\n"
       },
       "name": "Anti-Loop & Parse",
       "type": "n8n-nodes-base.code",
@@ -51,68 +51,12 @@
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "https://api.clickup.com/api/v2/list/901710789811/task?page=0&include_closed=true",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "options": {}
-      },
-      "name": "Fetch Master P0",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [800, 300],
-      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
-    },
-    {
-      "parameters": {
-        "method": "GET",
-        "url": "https://api.clickup.com/api/v2/list/901710789811/task?page=1&include_closed=true",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "options": {}
-      },
-      "name": "Fetch Master P1",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [920, 300],
-      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
-    },
-    {
-      "parameters": {
-        "method": "GET",
-        "url": "https://api.clickup.com/api/v2/list/901710789811/task?page=2&include_closed=true",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "options": {}
-      },
-      "name": "Fetch Master P2",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1040, 300],
-      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
-    },
-    {
-      "parameters": {
-        "method": "GET",
-        "url": "https://api.clickup.com/api/v2/list/901710789811/task?page=3&include_closed=true",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "options": {}
-      },
-      "name": "Fetch Master P3",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1160, 300],
-      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
-    },
-    {
-      "parameters": {
-        "jsCode": "const data = $('Anti-Loop & Parse').first().json;\nconst repoTasks = [\n  ...($('Fetch Repo P0').first().json.tasks || []),\n  ...($('Fetch Repo P1').first().json.tasks || [])\n];\nconst masterTasks = [\n  ...($('Fetch Master P0').first().json.tasks || []),\n  ...($('Fetch Master P1').first().json.tasks || []),\n  ...($('Fetch Master P2').first().json.tasks || []),\n  ...($('Fetch Master P3').first().json.tasks || [])\n];\n\nconst namePrefix = `[${data.repoShort}#${data.issueNumber}]`;\nlet repoTaskId = null;\nlet masterTaskId = null;\n\nfor (const t of repoTasks) {\n  if (t.name && t.name.startsWith(namePrefix)) {\n    repoTaskId = t.id;\n    break;\n  }\n}\nfor (const t of masterTasks) {\n  if (t.name && t.name.startsWith(namePrefix)) {\n    masterTaskId = t.id;\n    break;\n  }\n}\n\nreturn [{ json: { ...data, repoTaskId, masterTaskId } }];\n"
+        "jsCode": "const data = $('Anti-Loop & Parse').first().json;\nconst repoTasks = [\n  ...($('Fetch Repo P0').first().json.tasks || []),\n  ...($('Fetch Repo P1').first().json.tasks || [])\n];\n\nconst namePrefix = `[${data.repoShort}#${data.issueNumber}]`;\nlet repoTaskId = null;\n\nfor (const t of repoTasks) {\n  if (t.name && t.name.startsWith(namePrefix)) {\n    repoTaskId = t.id;\n    break;\n  }\n}\n\nreturn [{ json: { ...data, repoTaskId } }];\n"
       },
       "name": "Resolve Task IDs",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1280, 300]
+      "position": [860, 300]
     },
     {
       "parameters": {
@@ -134,16 +78,16 @@
       "name": "Route by Action",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 2,
-      "position": [1460, 300]
+      "position": [1040, 300]
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\n\nif (data.repoTaskId) return [];\n\nconst ghToClickupUser = {\n  'dheerajchand': 95317754,\n  'steveblackmon': 192189161\n};\nconst assigneeIds = (data.currentAssignees || [])\n  .map(login => ghToClickupUser[login])\n  .filter(id => id !== undefined);\n\nreturn [{\n  json: {\n    ...data,\n    taskName: `[${data.repoShort}#${data.issueNumber}] ${data.issueTitle}`,\n    taskDescription: `[sync] Synced from GitHub: ${data.issueUrl}\\n\\n${data.issueBody}`,\n    tags: data.issueLabels,\n    assigneeIds: assigneeIds\n  }\n}];\n"
+        "jsCode": "const data = $input.first().json;\n\nif (data.repoTaskId) return [];\n\n// Derive native fields from labels\nconst priorityMap = { 'priority:p0': 1, 'priority:p1': 2, 'priority:p2': 3, 'priority:p3': 4 };\nconst sizeTimeMap = {\n  'size:XS': 7200000, 'size:S': 14400000, 'size:M': 28800000,\n  'size:L': 57600000, 'size:XL': 115200000, 'size:XXL': 230400000\n};\nconst phaseDueDates = {\n  'Phase 1: UNBLOCK': 1739577599000,\n  'Phase 2: FOUNDATION': 1740787199000,\n  'Phase 3: CORE PIPELINE': 1741737599000,\n  'Phase 4: SEMANTIC LAYER': 1742860799000,\n  'Phase 5: ENRICHMENT': 1744070399000,\n  'Phase 6: POLISH': 1744934399000\n};\n\nlet priority = null;\nlet timeEstimate = null;\nconst labels = data.issueLabels || [];\nfor (const l of labels) {\n  if (priorityMap[l]) priority = priorityMap[l];\n  if (sizeTimeMap[l]) timeEstimate = sizeTimeMap[l];\n}\n\nlet dueDate = null;\nlet phaseTag = null;\nconst ms = data.milestoneName;\nif (ms && phaseDueDates[ms]) {\n  dueDate = phaseDueDates[ms];\n  phaseTag = ms.toLowerCase().replace(': ', '-').replace(/ /g, '-');\n}\n\n// Add phase tag to tags list\nconst tags = [...labels];\nif (phaseTag) tags.push(phaseTag);\n\nconst ghToClickupUser = {\n  'dheerajchand': 95317754,\n  'steveblackmon': 192189161\n};\nconst assigneeIds = (data.currentAssignees || [])\n  .map(login => ghToClickupUser[login])\n  .filter(id => id !== undefined);\n\nreturn [{\n  json: {\n    ...data,\n    taskName: `[${data.repoShort}#${data.issueNumber}] ${data.issueTitle}`,\n    taskDescription: `[sync] Synced from GitHub: ${data.issueUrl}\\n\\n${data.issueBody}`,\n    tags: tags,\n    assigneeIds: assigneeIds,\n    priority: priority,\n    timeEstimate: timeEstimate,\n    dueDate: dueDate\n  }\n}];\n"
       },
       "name": "Prepare Create",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1800, 60]
+      "position": [1380, 60]
     },
     {
       "parameters": {
@@ -153,40 +97,23 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({name: $json.taskName, description: $json.taskDescription, tags: $json.tags, status: 'backlog', assignees: $json.assigneeIds}) }}",
+        "jsonBody": "={{ JSON.stringify(Object.assign({name: $json.taskName, description: $json.taskDescription, tags: $json.tags, status: 'backlog', assignees: $json.assigneeIds}, $json.priority ? {priority: $json.priority} : {}, $json.timeEstimate ? {time_estimate: $json.timeEstimate} : {}, $json.dueDate ? {due_date: $json.dueDate, due_date_time: false} : {})) }}",
         "options": {}
       },
       "name": "Create Repo Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2040, 0],
+      "position": [1620, 60],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "=https://api.clickup.com/api/v2/list/{{ $('Prepare Create').item.json.masterListId }}/task",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({name: $('Prepare Create').item.json.taskName, description: $('Prepare Create').item.json.taskDescription, tags: $('Prepare Create').item.json.tags, status: 'backlog', assignees: $('Prepare Create').item.json.assigneeIds}) }}",
-        "options": {}
-      },
-      "name": "Create Master Task",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [2280, 0],
-      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
-    },
-    {
-      "parameters": {
-        "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [];\nreturn [{ json: { repoTaskId: data.repoTaskId, masterTaskId: data.masterTaskId, status: 'shipped' } }];\n"
+        "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [];\nreturn [{ json: { repoTaskId: data.repoTaskId, status: 'shipped' } }];\n"
       },
       "name": "Prepare Close",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1800, 260]
+      "position": [1380, 200]
     },
     {
       "parameters": {
@@ -202,34 +129,17 @@
       "name": "Close Repo Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2040, 240],
+      "position": [1620, 200],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
       "parameters": {
-        "method": "PUT",
-        "url": "=https://api.clickup.com/api/v2/task/{{ $('Prepare Close').item.json.masterTaskId }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({status: $('Prepare Close').item.json.status}) }}",
-        "options": {}
-      },
-      "name": "Close Master Task",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [2280, 260],
-      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
-    },
-    {
-      "parameters": {
-        "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [];\nreturn [{ json: { repoTaskId: data.repoTaskId, masterTaskId: data.masterTaskId, status: 'backlog' } }];\n"
+        "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [];\nreturn [{ json: { repoTaskId: data.repoTaskId, status: 'backlog' } }];\n"
       },
       "name": "Prepare Reopen",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1800, 440]
+      "position": [1380, 340]
     },
     {
       "parameters": {
@@ -245,34 +155,17 @@
       "name": "Reopen Repo Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2040, 420],
+      "position": [1620, 340],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
       "parameters": {
-        "method": "PUT",
-        "url": "=https://api.clickup.com/api/v2/task/{{ $('Prepare Reopen').item.json.masterTaskId }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({status: $('Prepare Reopen').item.json.status}) }}",
-        "options": {}
-      },
-      "name": "Reopen Master Task",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [2280, 440],
-      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
-    },
-    {
-      "parameters": {
-        "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [];\n\nconst labelToStatus = {\n  'status:scoping': 'scoping',\n  'status:in-design': 'in design',\n  'status:ready': 'ready for development',\n  'status:in-progress': 'in development',\n  'status:in-review': 'in review',\n  'status:testing': 'testing'\n};\n\nconst statusLabels = data.issueLabels.filter(l => l.startsWith('status:'));\nlet clickupStatus = 'backlog';\nif (statusLabels.length > 0) {\n  clickupStatus = labelToStatus[statusLabels[statusLabels.length - 1]] || 'backlog';\n}\n\nreturn [{ json: { repoTaskId: data.repoTaskId, masterTaskId: data.masterTaskId, status: clickupStatus } }];\n"
+        "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [];\n\n// Derive status from labels\nconst labelToStatus = {\n  'status:scoping': 'scoping',\n  'status:in-design': 'in design',\n  'status:ready': 'ready for development',\n  'status:in-progress': 'in development',\n  'status:in-review': 'in review',\n  'status:testing': 'testing'\n};\n\nconst statusLabels = data.issueLabels.filter(l => l.startsWith('status:'));\nlet clickupStatus = 'backlog';\nif (statusLabels.length > 0) {\n  clickupStatus = labelToStatus[statusLabels[statusLabels.length - 1]] || 'backlog';\n}\n\n// Derive priority and time_estimate from labels\nconst priorityMap = { 'priority:p0': 1, 'priority:p1': 2, 'priority:p2': 3, 'priority:p3': 4 };\nconst sizeTimeMap = {\n  'size:XS': 7200000, 'size:S': 14400000, 'size:M': 28800000,\n  'size:L': 57600000, 'size:XL': 115200000, 'size:XXL': 230400000\n};\n\nlet priority = null;\nlet timeEstimate = null;\nfor (const l of data.issueLabels) {\n  if (priorityMap[l]) priority = priorityMap[l];\n  if (sizeTimeMap[l]) timeEstimate = sizeTimeMap[l];\n}\n\nreturn [{ json: {\n  repoTaskId: data.repoTaskId,\n  status: clickupStatus,\n  priority: priority,\n  timeEstimate: timeEstimate\n} }];\n"
       },
       "name": "Prepare Label Update",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1800, 620]
+      "position": [1380, 480]
     },
     {
       "parameters": {
@@ -282,40 +175,23 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({status: $json.status}) }}",
+        "jsonBody": "={{ JSON.stringify(Object.assign({status: $json.status}, $json.priority ? {priority: $json.priority} : {}, $json.timeEstimate ? {time_estimate: $json.timeEstimate} : {})) }}",
         "options": {}
       },
       "name": "Update Repo Status",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2040, 600],
+      "position": [1620, 480],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
       "parameters": {
-        "method": "PUT",
-        "url": "=https://api.clickup.com/api/v2/task/{{ $('Prepare Label Update').item.json.masterTaskId }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({status: $('Prepare Label Update').item.json.status}) }}",
-        "options": {}
-      },
-      "name": "Update Master Status",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [2280, 620],
-      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
-    },
-    {
-      "parameters": {
-        "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [];\n\nconst commentText = `[sync] Synced from GitHub (${data.commentUser}):\\n\\n${data.commentBody}`;\nreturn [{ json: { repoTaskId: data.repoTaskId, masterTaskId: data.masterTaskId, commentText } }];\n"
+        "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [];\n\nconst commentText = `[sync] Synced from GitHub (${data.commentUser}):\\n\\n${data.commentBody}`;\nreturn [{ json: { repoTaskId: data.repoTaskId, commentText } }];\n"
       },
       "name": "Prepare Comment",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1800, 800]
+      "position": [1380, 620]
     },
     {
       "parameters": {
@@ -331,34 +207,17 @@
       "name": "Comment Repo Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2040, 780],
+      "position": [1620, 620],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "=https://api.clickup.com/api/v2/task/{{ $('Prepare Comment').item.json.masterTaskId }}/comment",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({comment_text: $('Prepare Comment').item.json.commentText}) }}",
-        "options": {}
-      },
-      "name": "Comment Master Task",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [2280, 800],
-      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
-    },
-    {
-      "parameters": {
-        "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [];\n\nconst ghToClickupUser = {\n  'dheerajchand': 95317754,\n  'steveblackmon': 192189161\n};\n\nconst clickupUserId = ghToClickupUser[data.assigneeLogin];\nif (!clickupUserId) return [];\n\nlet assigneePayload;\nif (data.action === 'assigned') {\n  assigneePayload = { assignees: { add: [clickupUserId], rem: [] } };\n} else {\n  assigneePayload = { assignees: { add: [], rem: [clickupUserId] } };\n}\n\nreturn [{\n  json: {\n    repoTaskId: data.repoTaskId,\n    masterTaskId: data.masterTaskId,\n    assigneePayload: assigneePayload\n  }\n}];\n"
+        "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [];\n\nconst ghToClickupUser = {\n  'dheerajchand': 95317754,\n  'steveblackmon': 192189161\n};\n\nconst clickupUserId = ghToClickupUser[data.assigneeLogin];\nif (!clickupUserId) return [];\n\nlet assigneePayload;\nif (data.action === 'assigned') {\n  assigneePayload = { assignees: { add: [clickupUserId], rem: [] } };\n} else {\n  assigneePayload = { assignees: { add: [], rem: [clickupUserId] } };\n}\n\nreturn [{\n  json: {\n    repoTaskId: data.repoTaskId,\n    assigneePayload: assigneePayload\n  }\n}];\n"
       },
       "name": "Prepare Assignee Update",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1800, 980]
+      "position": [1380, 760]
     },
     {
       "parameters": {
@@ -374,24 +233,7 @@
       "name": "Update Repo Assignees",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2040, 960],
-      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
-    },
-    {
-      "parameters": {
-        "method": "PUT",
-        "url": "=https://api.clickup.com/api/v2/task/{{ $('Prepare Assignee Update').item.json.masterTaskId }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($('Prepare Assignee Update').item.json.assigneePayload) }}",
-        "options": {}
-      },
-      "name": "Update Master Assignees",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [2280, 980],
+      "position": [1620, 760],
       "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
     }
   ],
@@ -406,18 +248,6 @@
       "main": [[{ "node": "Fetch Repo P1", "type": "main", "index": 0 }]]
     },
     "Fetch Repo P1": {
-      "main": [[{ "node": "Fetch Master P0", "type": "main", "index": 0 }]]
-    },
-    "Fetch Master P0": {
-      "main": [[{ "node": "Fetch Master P1", "type": "main", "index": 0 }]]
-    },
-    "Fetch Master P1": {
-      "main": [[{ "node": "Fetch Master P2", "type": "main", "index": 0 }]]
-    },
-    "Fetch Master P2": {
-      "main": [[{ "node": "Fetch Master P3", "type": "main", "index": 0 }]]
-    },
-    "Fetch Master P3": {
       "main": [[{ "node": "Resolve Task IDs", "type": "main", "index": 0 }]]
     },
     "Resolve Task IDs": {
@@ -438,38 +268,20 @@
     "Prepare Create": {
       "main": [[{ "node": "Create Repo Task", "type": "main", "index": 0 }]]
     },
-    "Create Repo Task": {
-      "main": [[{ "node": "Create Master Task", "type": "main", "index": 0 }]]
-    },
     "Prepare Close": {
       "main": [[{ "node": "Close Repo Task", "type": "main", "index": 0 }]]
-    },
-    "Close Repo Task": {
-      "main": [[{ "node": "Close Master Task", "type": "main", "index": 0 }]]
     },
     "Prepare Reopen": {
       "main": [[{ "node": "Reopen Repo Task", "type": "main", "index": 0 }]]
     },
-    "Reopen Repo Task": {
-      "main": [[{ "node": "Reopen Master Task", "type": "main", "index": 0 }]]
-    },
     "Prepare Label Update": {
       "main": [[{ "node": "Update Repo Status", "type": "main", "index": 0 }]]
-    },
-    "Update Repo Status": {
-      "main": [[{ "node": "Update Master Status", "type": "main", "index": 0 }]]
     },
     "Prepare Comment": {
       "main": [[{ "node": "Comment Repo Task", "type": "main", "index": 0 }]]
     },
-    "Comment Repo Task": {
-      "main": [[{ "node": "Comment Master Task", "type": "main", "index": 0 }]]
-    },
     "Prepare Assignee Update": {
       "main": [[{ "node": "Update Repo Assignees", "type": "main", "index": 0 }]]
-    },
-    "Update Repo Assignees": {
-      "main": [[{ "node": "Update Master Assignees", "type": "main", "index": 0 }]]
     }
   },
   "settings": { "executionOrder": "v1" },

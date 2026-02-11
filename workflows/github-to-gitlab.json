@@ -18,7 +18,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Anti-loop check + parse GitHub webhook payload\nconst body = $input.first().json.body;\nconst headers = $input.first().json.headers;\n\nconst eventType = headers['x-github-event'] || '';\nif (eventType !== 'issues' && eventType !== 'issue_comment') {\n  return [];\n}\n\nconst payload = typeof body === 'string' ? JSON.parse(body) : body;\nconst action = payload.action || '';\n\nconst repoFullName = (payload.repository || {}).full_name || '';\nif (repoFullName !== 'YOUR_ORG/YOUR_REPO') {\n  return [];\n}\n\nif (eventType === 'issues') {\n  const issue = payload.issue || {};\n  const title = issue.title || '';\n  const issueBody = issue.body || '';\n\n  if (title.includes('[sync]') || issueBody.includes('[sync]')) {\n    return [];\n  }\n\n  return [{\n    json: {\n      source: 'github',\n      eventType: 'issue',\n      action: action,\n      issueNumber: issue.number,\n      title: title,\n      body: issueBody,\n      state: issue.state === 'open' ? 'open' : 'closed',\n      labels: (issue.labels || []).map(l => l.name),\n      labelChanged: (payload.label || {}).name || null,\n      labelAction: action === 'labeled' ? 'add' : action === 'unlabeled' ? 'remove' : null,\n      assignee: (payload.assignee || {}).login || null,\n      assignees: (issue.assignees || []).map(a => a.login)\n    }\n  }];\n} else if (eventType === 'issue_comment') {\n  const issue = payload.issue || {};\n  const comment = payload.comment || {};\n  const commentBody = comment.body || '';\n\n  if (commentBody.includes('[sync]')) {\n    return [];\n  }\n\n  return [{\n    json: {\n      source: 'github',\n      eventType: 'comment',\n      action: 'comment',\n      issueNumber: issue.number,\n      commentBody: commentBody,\n      commentId: comment.id\n    }\n  }];\n}\n\nreturn [];"
+        "jsCode": "// Anti-loop check + parse GitHub webhook payload\nconst body = $input.first().json.body;\nconst headers = $input.first().json.headers;\n\nconst eventType = headers['x-github-event'] || '';\nif (eventType !== 'issues' && eventType !== 'issue_comment') {\n  return [];\n}\n\nconst payload = typeof body === 'string' ? JSON.parse(body) : body;\nconst action = payload.action || '';\n\nconst repoFullName = (payload.repository || {}).full_name || '';\nif (repoFullName !== 'electinfo/enterprise') {\n  return [];\n}\n\nif (eventType === 'issues') {\n  const issue = payload.issue || {};\n  const title = issue.title || '';\n  const issueBody = issue.body || '';\n\n  if (title.includes('[sync]') || issueBody.includes('[sync]')) {\n    return [];\n  }\n\n  // Extract milestone name for phase/due-date derivation\n  const milestone = issue.milestone || null;\n  const milestoneName = milestone ? (milestone.title || '') : '';\n\n  return [{\n    json: {\n      source: 'github',\n      eventType: 'issue',\n      action: action,\n      issueNumber: issue.number,\n      title: title,\n      body: issueBody,\n      state: issue.state === 'open' ? 'open' : 'closed',\n      labels: (issue.labels || []).map(l => l.name),\n      labelChanged: (payload.label || {}).name || null,\n      labelAction: action === 'labeled' ? 'add' : action === 'unlabeled' ? 'remove' : null,\n      assignee: (payload.assignee || {}).login || null,\n      assignees: (issue.assignees || []).map(a => a.login),\n      milestoneName: milestoneName\n    }\n  }];\n} else if (eventType === 'issue_comment') {\n  const issue = payload.issue || {};\n  const comment = payload.comment || {};\n  const commentBody = comment.body || '';\n\n  if (commentBody.includes('[sync]')) {\n    return [];\n  }\n\n  return [{\n    json: {\n      source: 'github',\n      eventType: 'comment',\n      action: 'comment',\n      issueNumber: issue.number,\n      commentBody: commentBody,\n      commentId: comment.id\n    }\n  }];\n}\n\nreturn [];"
       },
       "id": "parse-gh-gl",
       "name": "Anti-Loop & Parse",
@@ -29,7 +29,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "https://api.github.com/repos/YOUR_ORG/YOUR_REPO/contents/PATH_TO/issue_mapping.json",
+        "url": "https://api.github.com/repos/electinfo/enterprise/contents/rundeck/scripts/github-gitlab-sync/issue_mapping.json",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "options": {
@@ -149,6 +149,28 @@
                   }
                 ]
               }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "milestoned",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "demilestoned",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ]
+              }
             }
           ]
         },
@@ -162,7 +184,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Prepare create: skip if already mapped, add sync marker\nconst item = $input.first().json;\nconst ghNum = item.issueNumber;\nconst mapping = item.mapping || {};\n\n// Skip if already mapped (bootstrapped issue)\nconst existingGlIid = (mapping.github_to_gitlab || {})[String(ghNum)];\nif (existingGlIid) return [];\n\nconst syncMarker = `\\n\\n---\\n[sync] Synced from GitHub #${ghNum}`;\n\nreturn [{\n  json: {\n    ghNumber: ghNum,\n    title: item.title,\n    description: (item.body || '') + syncMarker,\n    labels: (item.labels || []).join(',')\n  }\n}];"
+        "jsCode": "// Prepare create: skip if already mapped, add sync marker\n// Derive milestone_id and due_date from GitHub milestone\nconst item = $input.first().json;\nconst ghNum = item.issueNumber;\nconst mapping = item.mapping || {};\n\n// Skip if already mapped (bootstrapped issue)\nconst existingGlIid = (mapping.github_to_gitlab || {})[String(ghNum)];\nif (existingGlIid) return [];\n\nconst syncMarker = `\\n\\n---\\n[sync] Synced from GitHub #${ghNum}`;\n\n// Map GitHub milestone to GitLab milestone ID and due date\nconst milestoneMap = {\n  'Phase 1: UNBLOCK': { id: 7300728, due: '2026-02-14' },\n  'Phase 2: FOUNDATION': { id: 7300729, due: '2026-02-28' },\n  'Phase 3: CORE PIPELINE': { id: 7300730, due: '2026-03-11' },\n  'Phase 4: SEMANTIC LAYER': { id: 7300731, due: '2026-03-24' },\n  'Phase 5: ENRICHMENT': { id: 7300732, due: '2026-04-07' },\n  'Phase 6: POLISH': { id: 7300733, due: '2026-04-17' },\n};\n\nconst result = {\n  ghNumber: ghNum,\n  title: item.title,\n  description: (item.body || '') + syncMarker,\n  labels: (item.labels || []).join(',')\n};\n\nconst msName = item.milestoneName || '';\nif (msName && milestoneMap[msName]) {\n  result.milestone_id = milestoneMap[msName].id;\n  result.due_date = milestoneMap[msName].due;\n}\n\nreturn [{ json: result }];"
       },
       "id": "prepare-create-gh-gl",
       "name": "Prepare Create",
@@ -173,12 +195,12 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://gitlab.com/api/v4/projects/YOUR_GITLAB_PROJECT_PATH_ENCODED/issues",
+        "url": "https://gitlab.com/api/v4/projects/75018515/issues",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ title: $json.title, description: $json.description, labels: $json.labels }) }}",
+        "jsonBody": "={{ JSON.stringify(Object.assign({ title: $json.title, description: $json.description, labels: $json.labels }, $json.milestone_id ? { milestone_id: $json.milestone_id } : {}, $json.due_date ? { due_date: $json.due_date } : {})) }}",
         "options": {}
       },
       "id": "api-create-gl",
@@ -206,7 +228,7 @@
     {
       "parameters": {
         "method": "PUT",
-        "url": "=https://gitlab.com/api/v4/projects/YOUR_GITLAB_PROJECT_PATH_ENCODED/issues/{{ $json.glIid }}",
+        "url": "=https://gitlab.com/api/v4/projects/75018515/issues/{{ $json.glIid }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -239,7 +261,7 @@
     {
       "parameters": {
         "method": "PUT",
-        "url": "=https://gitlab.com/api/v4/projects/YOUR_GITLAB_PROJECT_PATH_ENCODED/issues/{{ $json.glIid }}",
+        "url": "=https://gitlab.com/api/v4/projects/75018515/issues/{{ $json.glIid }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -272,7 +294,7 @@
     {
       "parameters": {
         "method": "PUT",
-        "url": "=https://gitlab.com/api/v4/projects/YOUR_GITLAB_PROJECT_PATH_ENCODED/issues/{{ $json.glIid }}",
+        "url": "=https://gitlab.com/api/v4/projects/75018515/issues/{{ $json.glIid }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -307,7 +329,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://gitlab.com/api/v4/projects/YOUR_GITLAB_PROJECT_PATH_ENCODED/issues/{{ $json.glIid }}/notes",
+        "url": "=https://gitlab.com/api/v4/projects/75018515/issues/{{ $json.glIid }}/notes",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -329,7 +351,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Map GitHub assignees to GitLab user IDs and set on issue\nconst item = $input.first().json;\nconst ghNum = item.issueNumber;\nconst mapping = item.mapping || {};\nconst glIid = (mapping.github_to_gitlab || {})[String(ghNum)];\nif (!glIid) return [];\n\n// GitHub login \u2192 GitLab user ID mapping\nconst userMap = {\n  // 'github_login': gitlab_user_id,\n  // Example: 'dheerajchand': 342200,\n};\n\nconst assignee = item.assignee;\nif (!assignee) return [];\n\nconst glUserId = userMap[assignee];\nif (!glUserId) return [];\n\n// For 'assigned': add this user. For 'unassigned': set assignee_ids to remaining users\nconst action = item.action;\nif (action === 'assigned') {\n  // Get all current assignees mapped to GL IDs\n  const allAssignees = (item.assignees || [])\n    .map(a => userMap[a])\n    .filter(id => id);\n  return [{ json: { glIid, assignee_ids: allAssignees } }];\n} else if (action === 'unassigned') {\n  // After unassign, set to remaining assignees\n  const remainingAssignees = (item.assignees || [])\n    .filter(a => a !== assignee)\n    .map(a => userMap[a])\n    .filter(id => id);\n  return [{ json: { glIid, assignee_ids: remainingAssignees } }];\n}\n\nreturn [];"
+        "jsCode": "// Map GitHub assignees to GitLab user IDs and set on issue\nconst item = $input.first().json;\nconst ghNum = item.issueNumber;\nconst mapping = item.mapping || {};\nconst glIid = (mapping.github_to_gitlab || {})[String(ghNum)];\nif (!glIid) return [];\n\n// GitHub login \u2192 GitLab user ID mapping\nconst userMap = {\n  'dheerajchand': 342200,\n  'steveblackmon': 2317775,\n};\n\nconst assignee = item.assignee;\nif (!assignee) return [];\n\nconst glUserId = userMap[assignee];\nif (!glUserId) return [];\n\n// For 'assigned': add this user. For 'unassigned': set assignee_ids to remaining users\nconst action = item.action;\nif (action === 'assigned') {\n  // Get all current assignees mapped to GL IDs\n  const allAssignees = (item.assignees || [])\n    .map(a => userMap[a])\n    .filter(id => id);\n  return [{ json: { glIid, assignee_ids: allAssignees } }];\n} else if (action === 'unassigned') {\n  // After unassign, set to remaining assignees\n  const remainingAssignees = (item.assignees || [])\n    .filter(a => a !== assignee)\n    .map(a => userMap[a])\n    .filter(id => id);\n  return [{ json: { glIid, assignee_ids: remainingAssignees } }];\n}\n\nreturn [];"
       },
       "id": "prepare-assign-gh-gl",
       "name": "Prepare Assign",
@@ -340,7 +362,7 @@
     {
       "parameters": {
         "method": "PUT",
-        "url": "=https://gitlab.com/api/v4/projects/YOUR_GITLAB_PROJECT_PATH_ENCODED/issues/{{ $json.glIid }}",
+        "url": "=https://gitlab.com/api/v4/projects/75018515/issues/{{ $json.glIid }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -355,6 +377,41 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [1580, 660],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "YOUR_GITLAB_CREDENTIAL_ID",
+          "name": "GitLab API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare milestone update: map GitHub milestone to GitLab milestone ID\nconst item = $input.first().json;\nconst ghNum = item.issueNumber;\nconst mapping = item.mapping || {};\nconst glIid = (mapping.github_to_gitlab || {})[String(ghNum)];\nif (!glIid) return [];\n\nconst milestoneMap = {\n  'Phase 1: UNBLOCK': { id: 7300728, due: '2026-02-14' },\n  'Phase 2: FOUNDATION': { id: 7300729, due: '2026-02-28' },\n  'Phase 3: CORE PIPELINE': { id: 7300730, due: '2026-03-11' },\n  'Phase 4: SEMANTIC LAYER': { id: 7300731, due: '2026-03-24' },\n  'Phase 5: ENRICHMENT': { id: 7300732, due: '2026-04-07' },\n  'Phase 6: POLISH': { id: 7300733, due: '2026-04-17' },\n};\n\nconst msName = item.milestoneName || '';\nconst action = item.action;\n\nif (action === 'milestoned' && msName && milestoneMap[msName]) {\n  return [{ json: {\n    glIid: glIid,\n    milestone_id: milestoneMap[msName].id,\n    due_date: milestoneMap[msName].due\n  }}];\n} else if (action === 'demilestoned') {\n  // Remove milestone (0 clears it in GitLab API)\n  return [{ json: {\n    glIid: glIid,\n    milestone_id: 0,\n    due_date: null\n  }}];\n}\n\nreturn [];"
+      },
+      "id": "prepare-milestone-gh-gl",
+      "name": "Prepare Milestone",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 780]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://gitlab.com/api/v4/projects/75018515/issues/{{ $json.glIid }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(Object.assign({ milestone_id: $json.milestone_id }, $json.due_date ? { due_date: $json.due_date } : {})) }}",
+        "options": {
+          "response": { "response": { "neverError": true } }
+        }
+      },
+      "id": "api-milestone-gl",
+      "name": "Update GitLab Milestone",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1580, 780],
       "credentials": {
         "httpHeaderAuth": {
           "id": "YOUR_GITLAB_CREDENTIAL_ID",
@@ -393,7 +450,9 @@
         [{ "node": "Prepare Label", "type": "main", "index": 0 }],
         [{ "node": "Prepare Comment", "type": "main", "index": 0 }],
         [{ "node": "Prepare Assign", "type": "main", "index": 0 }],
-        [{ "node": "Prepare Assign", "type": "main", "index": 0 }]
+        [{ "node": "Prepare Assign", "type": "main", "index": 0 }],
+        [{ "node": "Prepare Milestone", "type": "main", "index": 0 }],
+        [{ "node": "Prepare Milestone", "type": "main", "index": 0 }]
       ]
     },
     "Prepare Create": {
@@ -424,6 +483,11 @@
     "Prepare Assign": {
       "main": [
         [{ "node": "Assign GitLab Issue", "type": "main", "index": 0 }]
+      ]
+    },
+    "Prepare Milestone": {
+      "main": [
+        [{ "node": "Update GitLab Milestone", "type": "main", "index": 0 }]
       ]
     }
   },
