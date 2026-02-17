@@ -29,7 +29,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "https://api.github.com/repos/electinfo/enterprise/contents/rundeck/scripts/github-gitlab-sync/issue_mapping.json",
+        "url": "https://api.github.com/repos/electinfo/rundeck/contents/scripts/github-gitlab-sync/issue_mapping.json",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "options": {
@@ -50,7 +50,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Decode mapping file from GitHub API (base64) and merge with event data\nconst response = $input.first().json;\nlet mapping = { github_to_gitlab: {}, gitlab_to_github: {} };\n\nif (response && response.content) {\n  try {\n    const decoded = Buffer.from(response.content.replace(/\\s/g, ''), 'base64').toString('utf8');\n    mapping = JSON.parse(decoded);\n  } catch (e) {\n    // If decode fails, use empty mapping\n  }\n}\n\n// Pass through event data from Anti-Loop & Parse\nconst eventData = $('Anti-Loop & Parse').first().json;\nreturn [{ json: { ...eventData, mapping: mapping } }];"
+        "jsCode": "// Decode mapping file from GitHub API (base64) and merge with event data\nconst response = $input.first().json;\nlet mapping = { github_to_gitlab: {}, gitlab_to_github: {} };\nlet mappingSha = '';\n\nif (response && response.content) {\n  try {\n    const decoded = Buffer.from(response.content.replace(/\\s/g, ''), 'base64').toString('utf8');\n    mapping = JSON.parse(decoded);\n    mappingSha = response.sha || '';\n  } catch (e) {\n    // If decode fails, use empty mapping\n  }\n}\n\n// Pass through event data from Anti-Loop & Parse\nconst eventData = $('Anti-Loop & Parse').first().json;\nreturn [{ json: { ...eventData, mapping: mapping, mappingSha: mappingSha } }];"
       },
       "id": "decode-mapping-gh-gl",
       "name": "Decode Mapping",
@@ -184,7 +184,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Prepare create: skip if already mapped, add sync marker\n// Derive milestone_id and due_date from GitHub milestone\nconst item = $input.first().json;\nconst ghNum = item.issueNumber;\nconst mapping = item.mapping || {};\n\n// Skip if already mapped (bootstrapped issue)\nconst existingGlIid = (mapping.github_to_gitlab || {})[String(ghNum)];\nif (existingGlIid) return [];\n\nconst syncMarker = `\\n\\n---\\n[sync] Synced from GitHub #${ghNum}`;\n\n// Map GitHub milestone to GitLab milestone ID and due date\nconst milestoneMap = {\n  'Phase 1: UNBLOCK': { id: 7300728, due: '2026-02-14' },\n  'Phase 2: FOUNDATION': { id: 7300729, due: '2026-02-28' },\n  'Phase 3: CORE PIPELINE': { id: 7300730, due: '2026-03-11' },\n  'Phase 4: SEMANTIC LAYER': { id: 7300731, due: '2026-03-24' },\n  'Phase 5: ENRICHMENT': { id: 7300732, due: '2026-04-07' },\n  'Phase 6: POLISH': { id: 7300733, due: '2026-04-17' },\n};\n\nconst result = {\n  ghNumber: ghNum,\n  title: item.title,\n  description: (item.body || '') + syncMarker,\n  labels: (item.labels || []).join(',')\n};\n\nconst msName = item.milestoneName || '';\nif (msName && milestoneMap[msName]) {\n  result.milestone_id = milestoneMap[msName].id;\n  result.due_date = milestoneMap[msName].due;\n}\n\nreturn [{ json: result }];"
+        "jsCode": "// Prepare create: skip if already mapped, add sync marker\n// Derive milestone_id and due_date from GitHub milestone\nconst item = $input.first().json;\nconst ghNum = item.issueNumber;\nconst mapping = item.mapping || {};\n\n// Skip if already mapped (bootstrapped issue)\nconst existingGlIid = (mapping.github_to_gitlab || {})[String(ghNum)];\nif (existingGlIid) return [];\n\nconst syncMarker = `\\n\\n---\\n[sync] Synced from GitHub #${ghNum}`;\n\n// Map GitHub milestone to GitLab milestone ID and due date\nconst milestoneMap = {\n  'Phase 1: UNBLOCK': { id: 7300728, due: '2026-02-14' },\n  'Phase 2: FOUNDATION': { id: 7300729, due: '2026-02-28' },\n  'Phase 3: CORE PIPELINE': { id: 7300730, due: '2026-03-11' },\n  'Phase 4: SEMANTIC LAYER': { id: 7300731, due: '2026-03-24' },\n  'Phase 5: ENRICHMENT': { id: 7300732, due: '2026-04-07' },\n  'Phase 6: POLISH': { id: 7300733, due: '2026-04-17' },\n};\n\nconst result = {\n  ghNumber: ghNum,\n  title: item.title,\n  description: (item.body || '') + syncMarker,\n  labels: (item.labels || []).join(','),\n  mapping: mapping,\n  mappingSha: item.mappingSha || ''\n};\n\nconst msName = item.milestoneName || '';\nif (msName && milestoneMap[msName]) {\n  result.milestone_id = milestoneMap[msName].id;\n  result.due_date = milestoneMap[msName].due;\n}\n\nreturn [{ json: result }];"
       },
       "id": "prepare-create-gh-gl",
       "name": "Prepare Create",
@@ -418,6 +418,41 @@
           "name": "GitLab API"
         }
       }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Update issue mapping with new GH\u2194GL pair after creating GitLab issue\nconst glResponse = $input.first().json;\nconst prepareData = $('Prepare Create').first().json;\n\nconst ghNum = prepareData.ghNumber;\nconst glIid = glResponse.iid;\nconst mapping = prepareData.mapping || { github_to_gitlab: {}, gitlab_to_github: {} };\nconst mappingSha = prepareData.mappingSha || '';\n\nif (!ghNum || !glIid || !mappingSha) return [];\n\n// Add new mapping pair\nmapping.github_to_gitlab[String(ghNum)] = glIid;\nmapping.gitlab_to_github[String(glIid)] = ghNum;\n\n// Base64-encode updated mapping for GitHub Contents API PUT\nconst updatedContent = Buffer.from(JSON.stringify(mapping, null, 2) + '\\n').toString('base64');\n\nreturn [{\n  json: {\n    content: updatedContent,\n    sha: mappingSha,\n    message: `[sync] Add mapping: GH #${ghNum} \\u2194 GL #${glIid}`\n  }\n}];"
+      },
+      "id": "update-mapping-gh-gl",
+      "name": "Update Mapping",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1800, 60]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "https://api.github.com/repos/electinfo/rundeck/contents/scripts/github-gitlab-sync/issue_mapping.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ message: $json.message, content: $json.content, sha: $json.sha }) }}",
+        "options": {
+          "response": { "response": { "neverError": true } }
+        }
+      },
+      "id": "write-mapping-gh-gl",
+      "name": "Write Mapping",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2020, 60],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "YOUR_GITHUB_CREDENTIAL_ID",
+          "name": "GitHub API"
+        }
+      }
     }
   ],
   "connections": {
@@ -489,6 +524,16 @@
       "main": [
         [{ "node": "Update GitLab Milestone", "type": "main", "index": 0 }]
       ]
+    },
+    "Create GitLab Issue": {
+      "main": [
+        [{ "node": "Update Mapping", "type": "main", "index": 0 }]
+      ]
+    },
+    "Update Mapping": {
+      "main": [
+        [{ "node": "Write Mapping", "type": "main", "index": 0 }]
+      ]
     }
   },
   "settings": {
@@ -497,5 +542,5 @@
   "staticData": null,
   "tags": [],
   "pinData": {},
-  "active": false
+  "active": true
 }
