@@ -58,77 +58,18 @@
     },
     {
       "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.action }}",
         "rules": {
           "rules": [
-            {
-              "conditions": {
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "opened",
-                    "operator": { "type": "string", "operation": "equals" }
-                  }
-                ]
-              }
-            },
-            {
-              "conditions": {
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "closed",
-                    "operator": { "type": "string", "operation": "equals" }
-                  }
-                ]
-              }
-            },
-            {
-              "conditions": {
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "reopened",
-                    "operator": { "type": "string", "operation": "equals" }
-                  }
-                ]
-              }
-            },
-            {
-              "conditions": {
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "label_changed",
-                    "operator": { "type": "string", "operation": "equals" }
-                  }
-                ]
-              }
-            },
-            {
-              "conditions": {
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "comment",
-                    "operator": { "type": "string", "operation": "equals" }
-                  }
-                ]
-              }
-            },
-            {
-              "conditions": {
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "assignee_changed",
-                    "operator": { "type": "string", "operation": "equals" }
-                  }
-                ]
-              }
-            }
+            { "value2": "opened" },
+            { "value2": "closed" },
+            { "value2": "reopened" },
+            { "value2": "label_changed" },
+            { "value2": "comment" },
+            { "value2": "assignee_changed" }
           ]
-        },
-        "options": { "fallbackOutput": "none" }
+        }
       },
       "id": "switch-gl-gh",
       "name": "Route by Action",

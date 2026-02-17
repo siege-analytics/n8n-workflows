@@ -60,121 +60,22 @@
     },
     {
       "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.action }}",
         "rules": {
           "rules": [
-            {
-              "conditions": {
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "opened",
-                    "operator": { "type": "string", "operation": "equals" }
-                  }
-                ]
-              }
-            },
-            {
-              "conditions": {
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "closed",
-                    "operator": { "type": "string", "operation": "equals" }
-                  }
-                ]
-              }
-            },
-            {
-              "conditions": {
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "reopened",
-                    "operator": { "type": "string", "operation": "equals" }
-                  }
-                ]
-              }
-            },
-            {
-              "conditions": {
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "labeled",
-                    "operator": { "type": "string", "operation": "equals" }
-                  }
-                ]
-              }
-            },
-            {
-              "conditions": {
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "unlabeled",
-                    "operator": { "type": "string", "operation": "equals" }
-                  }
-                ]
-              }
-            },
-            {
-              "conditions": {
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "comment",
-                    "operator": { "type": "string", "operation": "equals" }
-                  }
-                ]
-              }
-            },
-            {
-              "conditions": {
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "assigned",
-                    "operator": { "type": "string", "operation": "equals" }
-                  }
-                ]
-              }
-            },
-            {
-              "conditions": {
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "unassigned",
-                    "operator": { "type": "string", "operation": "equals" }
-                  }
-                ]
-              }
-            },
-            {
-              "conditions": {
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "milestoned",
-                    "operator": { "type": "string", "operation": "equals" }
-                  }
-                ]
-              }
-            },
-            {
-              "conditions": {
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "demilestoned",
-                    "operator": { "type": "string", "operation": "equals" }
-                  }
-                ]
-              }
-            }
+            { "value2": "opened" },
+            { "value2": "closed" },
+            { "value2": "reopened" },
+            { "value2": "labeled" },
+            { "value2": "unlabeled" },
+            { "value2": "comment" },
+            { "value2": "assigned" },
+            { "value2": "unassigned" },
+            { "value2": "milestoned" },
+            { "value2": "demilestoned" }
           ]
-        },
-        "options": { "fallbackOutput": "none" }
+        }
       },
       "id": "switch-gh-gl",
       "name": "Route by Action",
