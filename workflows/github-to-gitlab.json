@@ -43,7 +43,7 @@
       "position": [680, 300],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "YOUR_GITHUB_CREDENTIAL_ID",
+          "id": "SbQTxL2kanI77ymm",
           "name": "GitHub API"
         }
       }
@@ -210,8 +210,8 @@
       "position": [1580, 60],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "YOUR_GITLAB_CREDENTIAL_ID",
-          "name": "GitLab API"
+          "id": "7tPOpKpwsVcO9uoI",
+          "name": "GitLab Auth"
         }
       }
     },
@@ -243,8 +243,8 @@
       "position": [1580, 180],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "YOUR_GITLAB_CREDENTIAL_ID",
-          "name": "GitLab API"
+          "id": "7tPOpKpwsVcO9uoI",
+          "name": "GitLab Auth"
         }
       }
     },
@@ -276,8 +276,8 @@
       "position": [1580, 300],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "YOUR_GITLAB_CREDENTIAL_ID",
-          "name": "GitLab API"
+          "id": "7tPOpKpwsVcO9uoI",
+          "name": "GitLab Auth"
         }
       }
     },
@@ -311,8 +311,8 @@
       "position": [1580, 420],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "YOUR_GITLAB_CREDENTIAL_ID",
-          "name": "GitLab API"
+          "id": "7tPOpKpwsVcO9uoI",
+          "name": "GitLab Auth"
         }
       }
     },
@@ -344,8 +344,8 @@
       "position": [1580, 540],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "YOUR_GITLAB_CREDENTIAL_ID",
-          "name": "GitLab API"
+          "id": "7tPOpKpwsVcO9uoI",
+          "name": "GitLab Auth"
         }
       }
     },
@@ -379,8 +379,8 @@
       "position": [1580, 660],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "YOUR_GITLAB_CREDENTIAL_ID",
-          "name": "GitLab API"
+          "id": "7tPOpKpwsVcO9uoI",
+          "name": "GitLab Auth"
         }
       }
     },
@@ -414,8 +414,8 @@
       "position": [1580, 780],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "YOUR_GITLAB_CREDENTIAL_ID",
-          "name": "GitLab API"
+          "id": "7tPOpKpwsVcO9uoI",
+          "name": "GitLab Auth"
         }
       }
     },
@@ -449,7 +449,7 @@
       "position": [2020, 60],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "YOUR_GITHUB_CREDENTIAL_ID",
+          "id": "SbQTxL2kanI77ymm",
           "name": "GitHub API"
         }
       }

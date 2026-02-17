@@ -41,7 +41,7 @@
       "position": [680, 300],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "YOUR_GITHUB_CREDENTIAL_ID",
+          "id": "SbQTxL2kanI77ymm",
           "name": "GitHub API"
         }
       }
@@ -164,7 +164,7 @@
       "position": [1580, 60],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "YOUR_GITHUB_CREDENTIAL_ID",
+          "id": "SbQTxL2kanI77ymm",
           "name": "GitHub API"
         }
       }
@@ -197,7 +197,7 @@
       "position": [1580, 180],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "YOUR_GITHUB_CREDENTIAL_ID",
+          "id": "SbQTxL2kanI77ymm",
           "name": "GitHub API"
         }
       }
@@ -230,7 +230,7 @@
       "position": [1580, 300],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "YOUR_GITHUB_CREDENTIAL_ID",
+          "id": "SbQTxL2kanI77ymm",
           "name": "GitHub API"
         }
       }
@@ -265,7 +265,7 @@
       "position": [1580, 420],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "YOUR_GITHUB_CREDENTIAL_ID",
+          "id": "SbQTxL2kanI77ymm",
           "name": "GitHub API"
         }
       }
@@ -298,7 +298,7 @@
       "position": [1580, 540],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "YOUR_GITHUB_CREDENTIAL_ID",
+          "id": "SbQTxL2kanI77ymm",
           "name": "GitHub API"
         }
       }
@@ -333,7 +333,7 @@
       "position": [1580, 660],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "YOUR_GITHUB_CREDENTIAL_ID",
+          "id": "SbQTxL2kanI77ymm",
           "name": "GitHub API"
         }
       }
