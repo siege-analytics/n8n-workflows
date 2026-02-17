@@ -27,7 +27,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "https://api.github.com/repos/YOUR_ORG/YOUR_REPO/contents/PATH_TO/issue_mapping.json",
+        "url": "https://api.github.com/repos/electinfo/rundeck/contents/scripts/github-gitlab-sync/issue_mapping.json",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "options": {
@@ -149,7 +149,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.github.com/repos/YOUR_ORG/YOUR_REPO/issues",
+        "url": "https://api.github.com/repos/electinfo/enterprise/issues",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -182,7 +182,7 @@
     {
       "parameters": {
         "method": "PATCH",
-        "url": "=https://api.github.com/repos/YOUR_ORG/YOUR_REPO/issues/{{ $json.ghNumber }}",
+        "url": "=https://api.github.com/repos/electinfo/enterprise/issues/{{ $json.ghNumber }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -215,7 +215,7 @@
     {
       "parameters": {
         "method": "PATCH",
-        "url": "=https://api.github.com/repos/YOUR_ORG/YOUR_REPO/issues/{{ $json.ghNumber }}",
+        "url": "=https://api.github.com/repos/electinfo/enterprise/issues/{{ $json.ghNumber }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -248,7 +248,7 @@
     {
       "parameters": {
         "method": "={{ $json.labelAction === 'add' ? 'POST' : 'DELETE' }}",
-        "url": "={{ $json.labelAction === 'add' ? 'https://api.github.com/repos/YOUR_ORG/YOUR_REPO/issues/' + $json.ghNumber + '/labels' : 'https://api.github.com/repos/YOUR_ORG/YOUR_REPO/issues/' + $json.ghNumber + '/labels/' + encodeURIComponent($json.label) }}",
+        "url": "={{ $json.labelAction === 'add' ? 'https://api.github.com/repos/electinfo/enterprise/issues/' + $json.ghNumber + '/labels' : 'https://api.github.com/repos/electinfo/enterprise/issues/' + $json.ghNumber + '/labels/' + encodeURIComponent($json.label) }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -283,7 +283,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://api.github.com/repos/YOUR_ORG/YOUR_REPO/issues/{{ $json.ghNumber }}/comments",
+        "url": "=https://api.github.com/repos/electinfo/enterprise/issues/{{ $json.ghNumber }}/comments",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -316,7 +316,7 @@
     {
       "parameters": {
         "method": "PATCH",
-        "url": "=https://api.github.com/repos/YOUR_ORG/YOUR_REPO/issues/{{ $json.ghNumber }}",
+        "url": "=https://api.github.com/repos/electinfo/enterprise/issues/{{ $json.ghNumber }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -407,5 +407,5 @@
   "staticData": null,
   "tags": [],
   "pinData": {},
-  "active": false
+  "active": true
 }
