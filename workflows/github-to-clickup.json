@@ -1,5 +1,6 @@
 {
-  "name": "GitHub \u2192 ClickUp Sync",
+  "name": "GitHub → ClickUp Sync",
+  "active": true,
   "nodes": [
     {
       "parameters": {
@@ -7,56 +8,86 @@
         "path": "github-to-clickup",
         "options": {}
       },
-      "name": "GitHub Webhook",
+      "name": "GitHub-Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [240, 300]
+      "position": [
+        240,
+        300
+      ],
+      "id": "75dab861-7952-45f0-a73d-ba767bd5835a"
     },
     {
       "parameters": {
         "jsCode": "const body = $input.first().json.body;\nconst action = body.action;\n\nconst issue = body.issue || {};\nconst comment = body.comment || {};\n\nconst title = issue.title || '';\nconst issueBody = issue.body || '';\nconst commentBody = comment.body || '';\n\nif (title.includes('[sync]') || issueBody.includes('[sync]') || commentBody.includes('[sync]')) {\n  return [];\n}\n\nconst repo = body.repository ? body.repository.full_name : 'unknown';\nconst repoShort = body.repository ? body.repository.name : 'unknown';\n\nconst listMap = {\n  'enterprise': '901710789803',\n  'siege_utilities': '901710789806',\n  'rundeck': '901710789808',\n  'ops': '901710789809'\n};\n\nconst repoListId = listMap[repoShort] || null;\nif (!repoListId) return [];\n\nconst assignee = body.assignee || {};\nconst currentAssignees = (issue.assignees || []).map(a => a.login);\nconst milestone = issue.milestone || null;\n\nreturn [{\n  json: {\n    action, repo, repoShort, repoListId,\n    issueNumber: issue.number,\n    issueTitle: issue.title,\n    issueBody: issue.body || '',\n    issueState: issue.state,\n    issueUrl: issue.html_url,\n    issueLabels: (issue.labels || []).map(l => l.name),\n    milestoneName: milestone ? milestone.title : null,\n    commentBody: comment.body || '',\n    commentUser: comment.user ? comment.user.login : '',\n    senderLogin: body.sender ? body.sender.login : '',\n    assigneeLogin: assignee.login || '',\n    currentAssignees: currentAssignees\n  }\n}];\n"
       },
-      "name": "Anti-Loop & Parse",
+      "name": "Anti-Loop-&-Parse",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [420, 300]
+      "position": [
+        420,
+        300
+      ],
+      "id": "356695a6-1f70-42aa-af5c-9816fb2038e7"
     },
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://api.clickup.com/api/v2/list/{{ $('Anti-Loop & Parse').item.json.repoListId }}/task?page=0&include_closed=true",
+        "url": "=https://api.clickup.com/api/v2/list/{{ $('Anti-Loop-&-Parse').item.json.repoListId }}/task?page=0&include_closed=true",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "options": {}
       },
-      "name": "Fetch Repo P0",
+      "name": "Fetch-Repo-P0",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [560, 300],
-      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
+      "position": [
+        560,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ju5QMIyIYhk1qUcc",
+          "name": "ClickUp API"
+        }
+      },
+      "id": "ae31f272-3da1-420b-8741-26dc450edb95"
     },
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://api.clickup.com/api/v2/list/{{ $('Anti-Loop & Parse').item.json.repoListId }}/task?page=1&include_closed=true",
+        "url": "=https://api.clickup.com/api/v2/list/{{ $('Anti-Loop-&-Parse').item.json.repoListId }}/task?page=1&include_closed=true",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "options": {}
       },
-      "name": "Fetch Repo P1",
+      "name": "Fetch-Repo-P1",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [680, 300],
-      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ju5QMIyIYhk1qUcc",
+          "name": "ClickUp API"
+        }
+      },
+      "id": "d76c3fb3-6be9-4f64-a9cd-d16fa5dadebb"
     },
     {
       "parameters": {
-        "jsCode": "const data = $('Anti-Loop & Parse').first().json;\nconst repoTasks = [\n  ...($('Fetch Repo P0').first().json.tasks || []),\n  ...($('Fetch Repo P1').first().json.tasks || [])\n];\n\nconst namePrefix = `[${data.repoShort}#${data.issueNumber}]`;\nlet repoTaskId = null;\n\nfor (const t of repoTasks) {\n  if (t.name && t.name.startsWith(namePrefix)) {\n    repoTaskId = t.id;\n    break;\n  }\n}\n\nreturn [{ json: { ...data, repoTaskId } }];\n"
+        "jsCode": "const data = $('Anti-Loop-&-Parse').first().json;\nconst repoTasks = [\n  ...($('Fetch-Repo-P0').first().json.tasks || []),\n  ...($('Fetch-Repo-P1').first().json.tasks || [])\n];\n\nconst namePrefix = `[${data.repoShort}#${data.issueNumber}]`;\nlet repoTaskId = null;\n\nfor (const t of repoTasks) {\n  if (t.name && t.name.startsWith(namePrefix)) {\n    repoTaskId = t.id;\n    break;\n  }\n}\n\nreturn [{ json: { ...data, repoTaskId } }];\n"
       },
-      "name": "Resolve Task IDs",
+      "name": "Resolve-Task-IDs",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [860, 300]
+      "position": [
+        860,
+        300
+      ],
+      "id": "f090ba2e-95fa-4fbe-a080-3c4f5d530c4e"
     },
     {
       "parameters": {
@@ -64,30 +95,54 @@
         "value1": "={{ $json.action }}",
         "rules": {
           "rules": [
-            { "value2": "opened" },
-            { "value2": "closed" },
-            { "value2": "reopened" },
-            { "value2": "labeled" },
-            { "value2": "unlabeled" },
-            { "value2": "created" },
-            { "value2": "assigned" },
-            { "value2": "unassigned" }
+            {
+              "value2": "opened"
+            },
+            {
+              "value2": "closed"
+            },
+            {
+              "value2": "reopened"
+            },
+            {
+              "value2": "labeled"
+            },
+            {
+              "value2": "unlabeled"
+            },
+            {
+              "value2": "created"
+            },
+            {
+              "value2": "assigned"
+            },
+            {
+              "value2": "unassigned"
+            }
           ]
         }
       },
-      "name": "Route by Action",
+      "name": "Route-by-Action",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 2,
-      "position": [1040, 300]
+      "position": [
+        1040,
+        300
+      ],
+      "id": "47e5a8f9-41e6-4edf-a3d2-5af4c12c2a7b"
     },
     {
       "parameters": {
         "jsCode": "const data = $input.first().json;\n\nif (data.repoTaskId) return [];\n\n// Derive native fields from labels\nconst priorityMap = { 'priority:p0': 1, 'priority:p1': 2, 'priority:p2': 3, 'priority:p3': 4 };\nconst sizeTimeMap = {\n  'size:XS': 7200000, 'size:S': 14400000, 'size:M': 28800000,\n  'size:L': 57600000, 'size:XL': 115200000, 'size:XXL': 230400000\n};\nconst phaseDueDates = {\n  'Phase 1: UNBLOCK': 1739577599000,\n  'Phase 2: FOUNDATION': 1740787199000,\n  'Phase 3: CORE PIPELINE': 1741737599000,\n  'Phase 4: SEMANTIC LAYER': 1742860799000,\n  'Phase 5: ENRICHMENT': 1744070399000,\n  'Phase 6: POLISH': 1744934399000\n};\n\nlet priority = null;\nlet timeEstimate = null;\nconst labels = data.issueLabels || [];\nfor (const l of labels) {\n  if (priorityMap[l]) priority = priorityMap[l];\n  if (sizeTimeMap[l]) timeEstimate = sizeTimeMap[l];\n}\n\nlet dueDate = null;\nlet phaseTag = null;\nconst ms = data.milestoneName;\nif (ms && phaseDueDates[ms]) {\n  dueDate = phaseDueDates[ms];\n  phaseTag = ms.toLowerCase().replace(': ', '-').replace(/ /g, '-');\n}\n\n// Add phase tag to tags list\nconst tags = [...labels];\nif (phaseTag) tags.push(phaseTag);\n\nconst ghToClickupUser = {\n  'dheerajchand': 95317754,\n  'steveblackmon': 192189161\n};\nconst assigneeIds = (data.currentAssignees || [])\n  .map(login => ghToClickupUser[login])\n  .filter(id => id !== undefined);\n\nreturn [{\n  json: {\n    ...data,\n    taskName: `[${data.repoShort}#${data.issueNumber}] ${data.issueTitle}`,\n    taskDescription: `[sync] Synced from GitHub: ${data.issueUrl}\\n\\n${data.issueBody}`,\n    tags: tags,\n    assigneeIds: assigneeIds,\n    priority: priority,\n    timeEstimate: timeEstimate,\n    dueDate: dueDate\n  }\n}];\n"
       },
-      "name": "Prepare Create",
+      "name": "Prepare-Create",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1380, 60]
+      "position": [
+        1380,
+        60
+      ],
+      "id": "c5a026c4-7878-4c7e-974f-fe207113df1f"
     },
     {
       "parameters": {
@@ -100,20 +155,33 @@
         "jsonBody": "={{ JSON.stringify(Object.assign({name: $json.taskName, description: $json.taskDescription, tags: $json.tags, status: 'backlog', assignees: $json.assigneeIds}, $json.priority ? {priority: $json.priority} : {}, $json.timeEstimate ? {time_estimate: $json.timeEstimate} : {}, $json.dueDate ? {due_date: $json.dueDate, due_date_time: false} : {})) }}",
         "options": {}
       },
-      "name": "Create Repo Task",
+      "name": "Create-Repo-Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1620, 60],
-      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
+      "position": [
+        1620,
+        60
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ju5QMIyIYhk1qUcc",
+          "name": "ClickUp API"
+        }
+      },
+      "id": "61186318-c6a8-4b88-8f52-6038aa8b7c12"
     },
     {
       "parameters": {
         "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [];\nreturn [{ json: { repoTaskId: data.repoTaskId, status: 'shipped' } }];\n"
       },
-      "name": "Prepare Close",
+      "name": "Prepare-Close",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1380, 200]
+      "position": [
+        1380,
+        200
+      ],
+      "id": "9687cbea-02b3-42f5-a146-08b5310bcb7f"
     },
     {
       "parameters": {
@@ -126,20 +194,33 @@
         "jsonBody": "={{ JSON.stringify({status: $json.status}) }}",
         "options": {}
       },
-      "name": "Close Repo Task",
+      "name": "Close-Repo-Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1620, 200],
-      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
+      "position": [
+        1620,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ju5QMIyIYhk1qUcc",
+          "name": "ClickUp API"
+        }
+      },
+      "id": "1e597d12-c991-4a35-861a-8b6d15668def"
     },
     {
       "parameters": {
         "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [];\nreturn [{ json: { repoTaskId: data.repoTaskId, status: 'backlog' } }];\n"
       },
-      "name": "Prepare Reopen",
+      "name": "Prepare-Reopen",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1380, 340]
+      "position": [
+        1380,
+        340
+      ],
+      "id": "dcc582d2-f2d9-4881-b72d-da2c77c8ba29"
     },
     {
       "parameters": {
@@ -152,20 +233,33 @@
         "jsonBody": "={{ JSON.stringify({status: $json.status}) }}",
         "options": {}
       },
-      "name": "Reopen Repo Task",
+      "name": "Reopen-Repo-Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1620, 340],
-      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
+      "position": [
+        1620,
+        340
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ju5QMIyIYhk1qUcc",
+          "name": "ClickUp API"
+        }
+      },
+      "id": "d33775b5-47c2-4882-8881-9457660eaa10"
     },
     {
       "parameters": {
         "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [];\n\n// Derive status from labels\nconst labelToStatus = {\n  'status:scoping': 'scoping',\n  'status:in-design': 'in design',\n  'status:ready': 'ready for development',\n  'status:in-progress': 'in development',\n  'status:in-review': 'in review',\n  'status:testing': 'testing'\n};\n\nconst statusLabels = data.issueLabels.filter(l => l.startsWith('status:'));\nlet clickupStatus = 'backlog';\nif (statusLabels.length > 0) {\n  clickupStatus = labelToStatus[statusLabels[statusLabels.length - 1]] || 'backlog';\n}\n\n// Derive priority and time_estimate from labels\nconst priorityMap = { 'priority:p0': 1, 'priority:p1': 2, 'priority:p2': 3, 'priority:p3': 4 };\nconst sizeTimeMap = {\n  'size:XS': 7200000, 'size:S': 14400000, 'size:M': 28800000,\n  'size:L': 57600000, 'size:XL': 115200000, 'size:XXL': 230400000\n};\n\nlet priority = null;\nlet timeEstimate = null;\nfor (const l of data.issueLabels) {\n  if (priorityMap[l]) priority = priorityMap[l];\n  if (sizeTimeMap[l]) timeEstimate = sizeTimeMap[l];\n}\n\nreturn [{ json: {\n  repoTaskId: data.repoTaskId,\n  status: clickupStatus,\n  priority: priority,\n  timeEstimate: timeEstimate\n} }];\n"
       },
-      "name": "Prepare Label Update",
+      "name": "Prepare-Label-Update",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1380, 480]
+      "position": [
+        1380,
+        480
+      ],
+      "id": "602bdd3d-f6d3-4d11-8155-967c4a14cca1"
     },
     {
       "parameters": {
@@ -178,20 +272,33 @@
         "jsonBody": "={{ JSON.stringify(Object.assign({status: $json.status}, $json.priority ? {priority: $json.priority} : {}, $json.timeEstimate ? {time_estimate: $json.timeEstimate} : {})) }}",
         "options": {}
       },
-      "name": "Update Repo Status",
+      "name": "Update-Repo-Status",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1620, 480],
-      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
+      "position": [
+        1620,
+        480
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ju5QMIyIYhk1qUcc",
+          "name": "ClickUp API"
+        }
+      },
+      "id": "2f7fc5a5-0a99-43d7-aaf7-fbabbd7c03d8"
     },
     {
       "parameters": {
         "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [];\n\nconst commentText = `[sync] Synced from GitHub (${data.commentUser}):\\n\\n${data.commentBody}`;\nreturn [{ json: { repoTaskId: data.repoTaskId, commentText } }];\n"
       },
-      "name": "Prepare Comment",
+      "name": "Prepare-Comment",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1380, 620]
+      "position": [
+        1380,
+        620
+      ],
+      "id": "bb2af787-1752-4532-941c-701141b0f354"
     },
     {
       "parameters": {
@@ -204,20 +311,33 @@
         "jsonBody": "={{ JSON.stringify({comment_text: $json.commentText}) }}",
         "options": {}
       },
-      "name": "Comment Repo Task",
+      "name": "Comment-Repo-Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1620, 620],
-      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
+      "position": [
+        1620,
+        620
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ju5QMIyIYhk1qUcc",
+          "name": "ClickUp API"
+        }
+      },
+      "id": "3b2ad56e-a333-4cb1-be57-da8c461687c0"
     },
     {
       "parameters": {
         "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [];\n\nconst ghToClickupUser = {\n  'dheerajchand': 95317754,\n  'steveblackmon': 192189161\n};\n\nconst clickupUserId = ghToClickupUser[data.assigneeLogin];\nif (!clickupUserId) return [];\n\nlet assigneePayload;\nif (data.action === 'assigned') {\n  assigneePayload = { assignees: { add: [clickupUserId], rem: [] } };\n} else {\n  assigneePayload = { assignees: { add: [], rem: [clickupUserId] } };\n}\n\nreturn [{\n  json: {\n    repoTaskId: data.repoTaskId,\n    assigneePayload: assigneePayload\n  }\n}];\n"
       },
-      "name": "Prepare Assignee Update",
+      "name": "Prepare-Assignee-Update",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1380, 760]
+      "position": [
+        1380,
+        760
+      ],
+      "id": "93590568-d60d-40fc-8ae5-c5f9cf94482f"
     },
     {
       "parameters": {
@@ -230,60 +350,777 @@
         "jsonBody": "={{ JSON.stringify($json.assigneePayload) }}",
         "options": {}
       },
-      "name": "Update Repo Assignees",
+      "name": "Update-Repo-Assignees",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1620, 760],
-      "credentials": { "httpHeaderAuth": { "id": "ju5QMIyIYhk1qUcc", "name": "ClickUp API" } }
+      "position": [
+        1620,
+        760
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ju5QMIyIYhk1qUcc",
+          "name": "ClickUp API"
+        }
+      },
+      "id": "ad413562-7f4d-4456-96c9-63dfbeb6f129"
     }
   ],
   "connections": {
-    "GitHub Webhook": {
-      "main": [[{ "node": "Anti-Loop & Parse", "type": "main", "index": 0 }]]
-    },
-    "Anti-Loop & Parse": {
-      "main": [[{ "node": "Fetch Repo P0", "type": "main", "index": 0 }]]
-    },
-    "Fetch Repo P0": {
-      "main": [[{ "node": "Fetch Repo P1", "type": "main", "index": 0 }]]
-    },
-    "Fetch Repo P1": {
-      "main": [[{ "node": "Resolve Task IDs", "type": "main", "index": 0 }]]
-    },
-    "Resolve Task IDs": {
-      "main": [[{ "node": "Route by Action", "type": "main", "index": 0 }]]
-    },
-    "Route by Action": {
+    "GitHub-Webhook": {
       "main": [
-        [{ "node": "Prepare Create", "type": "main", "index": 0 }],
-        [{ "node": "Prepare Close", "type": "main", "index": 0 }],
-        [{ "node": "Prepare Reopen", "type": "main", "index": 0 }],
-        [{ "node": "Prepare Label Update", "type": "main", "index": 0 }],
-        [{ "node": "Prepare Label Update", "type": "main", "index": 0 }],
-        [{ "node": "Prepare Comment", "type": "main", "index": 0 }],
-        [{ "node": "Prepare Assignee Update", "type": "main", "index": 0 }],
-        [{ "node": "Prepare Assignee Update", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Anti-Loop-&-Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Prepare Create": {
-      "main": [[{ "node": "Create Repo Task", "type": "main", "index": 0 }]]
+    "Anti-Loop-&-Parse": {
+      "main": [
+        [
+          {
+            "node": "Fetch-Repo-P0",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Prepare Close": {
-      "main": [[{ "node": "Close Repo Task", "type": "main", "index": 0 }]]
+    "Fetch-Repo-P0": {
+      "main": [
+        [
+          {
+            "node": "Fetch-Repo-P1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Prepare Reopen": {
-      "main": [[{ "node": "Reopen Repo Task", "type": "main", "index": 0 }]]
+    "Fetch-Repo-P1": {
+      "main": [
+        [
+          {
+            "node": "Resolve-Task-IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Prepare Label Update": {
-      "main": [[{ "node": "Update Repo Status", "type": "main", "index": 0 }]]
+    "Resolve-Task-IDs": {
+      "main": [
+        [
+          {
+            "node": "Route-by-Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Prepare Comment": {
-      "main": [[{ "node": "Comment Repo Task", "type": "main", "index": 0 }]]
+    "Route-by-Action": {
+      "main": [
+        [
+          {
+            "node": "Prepare-Create",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare-Close",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare-Reopen",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare-Label-Update",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare-Label-Update",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare-Comment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare-Assignee-Update",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare-Assignee-Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Prepare Assignee Update": {
-      "main": [[{ "node": "Update Repo Assignees", "type": "main", "index": 0 }]]
+    "Prepare-Create": {
+      "main": [
+        [
+          {
+            "node": "Create-Repo-Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare-Close": {
+      "main": [
+        [
+          {
+            "node": "Close-Repo-Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare-Reopen": {
+      "main": [
+        [
+          {
+            "node": "Reopen-Repo-Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare-Label-Update": {
+      "main": [
+        [
+          {
+            "node": "Update-Repo-Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare-Comment": {
+      "main": [
+        [
+          {
+            "node": "Comment-Repo-Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare-Assignee-Update": {
+      "main": [
+        [
+          {
+            "node": "Update-Repo-Assignees",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "settings": { "executionOrder": "v1" },
-  "meta": { "templateCredsSetupCompleted": true }
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-02-18T16:22:15.100Z",
+    "createdAt": "2026-02-18T16:22:15.100Z",
+    "versionId": "85a5465c-a208-4400-8ce5-5a2bd2051ab6",
+    "workflowId": "xZIFTqprPeDRyKBL",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "github-to-clickup",
+          "options": {}
+        },
+        "name": "GitHub-Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          240,
+          300
+        ],
+        "id": "75dab861-7952-45f0-a73d-ba767bd5835a"
+      },
+      {
+        "parameters": {
+          "jsCode": "const body = $input.first().json.body;\nconst action = body.action;\n\nconst issue = body.issue || {};\nconst comment = body.comment || {};\n\nconst title = issue.title || '';\nconst issueBody = issue.body || '';\nconst commentBody = comment.body || '';\n\nif (title.includes('[sync]') || issueBody.includes('[sync]') || commentBody.includes('[sync]')) {\n  return [];\n}\n\nconst repo = body.repository ? body.repository.full_name : 'unknown';\nconst repoShort = body.repository ? body.repository.name : 'unknown';\n\nconst listMap = {\n  'enterprise': '901710789803',\n  'siege_utilities': '901710789806',\n  'rundeck': '901710789808',\n  'ops': '901710789809'\n};\n\nconst repoListId = listMap[repoShort] || null;\nif (!repoListId) return [];\n\nconst assignee = body.assignee || {};\nconst currentAssignees = (issue.assignees || []).map(a => a.login);\nconst milestone = issue.milestone || null;\n\nreturn [{\n  json: {\n    action, repo, repoShort, repoListId,\n    issueNumber: issue.number,\n    issueTitle: issue.title,\n    issueBody: issue.body || '',\n    issueState: issue.state,\n    issueUrl: issue.html_url,\n    issueLabels: (issue.labels || []).map(l => l.name),\n    milestoneName: milestone ? milestone.title : null,\n    commentBody: comment.body || '',\n    commentUser: comment.user ? comment.user.login : '',\n    senderLogin: body.sender ? body.sender.login : '',\n    assigneeLogin: assignee.login || '',\n    currentAssignees: currentAssignees\n  }\n}];\n"
+        },
+        "name": "Anti-Loop-&-Parse",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          420,
+          300
+        ],
+        "id": "356695a6-1f70-42aa-af5c-9816fb2038e7"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "=https://api.clickup.com/api/v2/list/{{ $('Anti-Loop-&-Parse').item.json.repoListId }}/task?page=0&include_closed=true",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "options": {}
+        },
+        "name": "Fetch-Repo-P0",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          560,
+          300
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "ju5QMIyIYhk1qUcc",
+            "name": "ClickUp API"
+          }
+        },
+        "id": "ae31f272-3da1-420b-8741-26dc450edb95"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "=https://api.clickup.com/api/v2/list/{{ $('Anti-Loop-&-Parse').item.json.repoListId }}/task?page=1&include_closed=true",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "options": {}
+        },
+        "name": "Fetch-Repo-P1",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          680,
+          300
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "ju5QMIyIYhk1qUcc",
+            "name": "ClickUp API"
+          }
+        },
+        "id": "d76c3fb3-6be9-4f64-a9cd-d16fa5dadebb"
+      },
+      {
+        "parameters": {
+          "jsCode": "const data = $('Anti-Loop-&-Parse').first().json;\nconst repoTasks = [\n  ...($('Fetch-Repo-P0').first().json.tasks || []),\n  ...($('Fetch-Repo-P1').first().json.tasks || [])\n];\n\nconst namePrefix = `[${data.repoShort}#${data.issueNumber}]`;\nlet repoTaskId = null;\n\nfor (const t of repoTasks) {\n  if (t.name && t.name.startsWith(namePrefix)) {\n    repoTaskId = t.id;\n    break;\n  }\n}\n\nreturn [{ json: { ...data, repoTaskId } }];\n"
+        },
+        "name": "Resolve-Task-IDs",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          860,
+          300
+        ],
+        "id": "f090ba2e-95fa-4fbe-a080-3c4f5d530c4e"
+      },
+      {
+        "parameters": {
+          "dataType": "string",
+          "value1": "={{ $json.action }}",
+          "rules": {
+            "rules": [
+              {
+                "value2": "opened"
+              },
+              {
+                "value2": "closed"
+              },
+              {
+                "value2": "reopened"
+              },
+              {
+                "value2": "labeled"
+              },
+              {
+                "value2": "unlabeled"
+              },
+              {
+                "value2": "created"
+              },
+              {
+                "value2": "assigned"
+              },
+              {
+                "value2": "unassigned"
+              }
+            ]
+          }
+        },
+        "name": "Route-by-Action",
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 2,
+        "position": [
+          1040,
+          300
+        ],
+        "id": "47e5a8f9-41e6-4edf-a3d2-5af4c12c2a7b"
+      },
+      {
+        "parameters": {
+          "jsCode": "const data = $input.first().json;\n\nif (data.repoTaskId) return [];\n\n// Derive native fields from labels\nconst priorityMap = { 'priority:p0': 1, 'priority:p1': 2, 'priority:p2': 3, 'priority:p3': 4 };\nconst sizeTimeMap = {\n  'size:XS': 7200000, 'size:S': 14400000, 'size:M': 28800000,\n  'size:L': 57600000, 'size:XL': 115200000, 'size:XXL': 230400000\n};\nconst phaseDueDates = {\n  'Phase 1: UNBLOCK': 1739577599000,\n  'Phase 2: FOUNDATION': 1740787199000,\n  'Phase 3: CORE PIPELINE': 1741737599000,\n  'Phase 4: SEMANTIC LAYER': 1742860799000,\n  'Phase 5: ENRICHMENT': 1744070399000,\n  'Phase 6: POLISH': 1744934399000\n};\n\nlet priority = null;\nlet timeEstimate = null;\nconst labels = data.issueLabels || [];\nfor (const l of labels) {\n  if (priorityMap[l]) priority = priorityMap[l];\n  if (sizeTimeMap[l]) timeEstimate = sizeTimeMap[l];\n}\n\nlet dueDate = null;\nlet phaseTag = null;\nconst ms = data.milestoneName;\nif (ms && phaseDueDates[ms]) {\n  dueDate = phaseDueDates[ms];\n  phaseTag = ms.toLowerCase().replace(': ', '-').replace(/ /g, '-');\n}\n\n// Add phase tag to tags list\nconst tags = [...labels];\nif (phaseTag) tags.push(phaseTag);\n\nconst ghToClickupUser = {\n  'dheerajchand': 95317754,\n  'steveblackmon': 192189161\n};\nconst assigneeIds = (data.currentAssignees || [])\n  .map(login => ghToClickupUser[login])\n  .filter(id => id !== undefined);\n\nreturn [{\n  json: {\n    ...data,\n    taskName: `[${data.repoShort}#${data.issueNumber}] ${data.issueTitle}`,\n    taskDescription: `[sync] Synced from GitHub: ${data.issueUrl}\\n\\n${data.issueBody}`,\n    tags: tags,\n    assigneeIds: assigneeIds,\n    priority: priority,\n    timeEstimate: timeEstimate,\n    dueDate: dueDate\n  }\n}];\n"
+        },
+        "name": "Prepare-Create",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1380,
+          60
+        ],
+        "id": "c5a026c4-7878-4c7e-974f-fe207113df1f"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "=https://api.clickup.com/api/v2/list/{{ $json.repoListId }}/task",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify(Object.assign({name: $json.taskName, description: $json.taskDescription, tags: $json.tags, status: 'backlog', assignees: $json.assigneeIds}, $json.priority ? {priority: $json.priority} : {}, $json.timeEstimate ? {time_estimate: $json.timeEstimate} : {}, $json.dueDate ? {due_date: $json.dueDate, due_date_time: false} : {})) }}",
+          "options": {}
+        },
+        "name": "Create-Repo-Task",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1620,
+          60
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "ju5QMIyIYhk1qUcc",
+            "name": "ClickUp API"
+          }
+        },
+        "id": "61186318-c6a8-4b88-8f52-6038aa8b7c12"
+      },
+      {
+        "parameters": {
+          "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [];\nreturn [{ json: { repoTaskId: data.repoTaskId, status: 'shipped' } }];\n"
+        },
+        "name": "Prepare-Close",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1380,
+          200
+        ],
+        "id": "9687cbea-02b3-42f5-a146-08b5310bcb7f"
+      },
+      {
+        "parameters": {
+          "method": "PUT",
+          "url": "=https://api.clickup.com/api/v2/task/{{ $json.repoTaskId }}",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({status: $json.status}) }}",
+          "options": {}
+        },
+        "name": "Close-Repo-Task",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1620,
+          200
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "ju5QMIyIYhk1qUcc",
+            "name": "ClickUp API"
+          }
+        },
+        "id": "1e597d12-c991-4a35-861a-8b6d15668def"
+      },
+      {
+        "parameters": {
+          "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [];\nreturn [{ json: { repoTaskId: data.repoTaskId, status: 'backlog' } }];\n"
+        },
+        "name": "Prepare-Reopen",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1380,
+          340
+        ],
+        "id": "dcc582d2-f2d9-4881-b72d-da2c77c8ba29"
+      },
+      {
+        "parameters": {
+          "method": "PUT",
+          "url": "=https://api.clickup.com/api/v2/task/{{ $json.repoTaskId }}",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({status: $json.status}) }}",
+          "options": {}
+        },
+        "name": "Reopen-Repo-Task",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1620,
+          340
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "ju5QMIyIYhk1qUcc",
+            "name": "ClickUp API"
+          }
+        },
+        "id": "d33775b5-47c2-4882-8881-9457660eaa10"
+      },
+      {
+        "parameters": {
+          "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [];\n\n// Derive status from labels\nconst labelToStatus = {\n  'status:scoping': 'scoping',\n  'status:in-design': 'in design',\n  'status:ready': 'ready for development',\n  'status:in-progress': 'in development',\n  'status:in-review': 'in review',\n  'status:testing': 'testing'\n};\n\nconst statusLabels = data.issueLabels.filter(l => l.startsWith('status:'));\nlet clickupStatus = 'backlog';\nif (statusLabels.length > 0) {\n  clickupStatus = labelToStatus[statusLabels[statusLabels.length - 1]] || 'backlog';\n}\n\n// Derive priority and time_estimate from labels\nconst priorityMap = { 'priority:p0': 1, 'priority:p1': 2, 'priority:p2': 3, 'priority:p3': 4 };\nconst sizeTimeMap = {\n  'size:XS': 7200000, 'size:S': 14400000, 'size:M': 28800000,\n  'size:L': 57600000, 'size:XL': 115200000, 'size:XXL': 230400000\n};\n\nlet priority = null;\nlet timeEstimate = null;\nfor (const l of data.issueLabels) {\n  if (priorityMap[l]) priority = priorityMap[l];\n  if (sizeTimeMap[l]) timeEstimate = sizeTimeMap[l];\n}\n\nreturn [{ json: {\n  repoTaskId: data.repoTaskId,\n  status: clickupStatus,\n  priority: priority,\n  timeEstimate: timeEstimate\n} }];\n"
+        },
+        "name": "Prepare-Label-Update",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1380,
+          480
+        ],
+        "id": "602bdd3d-f6d3-4d11-8155-967c4a14cca1"
+      },
+      {
+        "parameters": {
+          "method": "PUT",
+          "url": "=https://api.clickup.com/api/v2/task/{{ $json.repoTaskId }}",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify(Object.assign({status: $json.status}, $json.priority ? {priority: $json.priority} : {}, $json.timeEstimate ? {time_estimate: $json.timeEstimate} : {})) }}",
+          "options": {}
+        },
+        "name": "Update-Repo-Status",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1620,
+          480
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "ju5QMIyIYhk1qUcc",
+            "name": "ClickUp API"
+          }
+        },
+        "id": "2f7fc5a5-0a99-43d7-aaf7-fbabbd7c03d8"
+      },
+      {
+        "parameters": {
+          "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [];\n\nconst commentText = `[sync] Synced from GitHub (${data.commentUser}):\\n\\n${data.commentBody}`;\nreturn [{ json: { repoTaskId: data.repoTaskId, commentText } }];\n"
+        },
+        "name": "Prepare-Comment",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1380,
+          620
+        ],
+        "id": "bb2af787-1752-4532-941c-701141b0f354"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "=https://api.clickup.com/api/v2/task/{{ $json.repoTaskId }}/comment",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({comment_text: $json.commentText}) }}",
+          "options": {}
+        },
+        "name": "Comment-Repo-Task",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1620,
+          620
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "ju5QMIyIYhk1qUcc",
+            "name": "ClickUp API"
+          }
+        },
+        "id": "3b2ad56e-a333-4cb1-be57-da8c461687c0"
+      },
+      {
+        "parameters": {
+          "jsCode": "const data = $input.first().json;\nif (!data.repoTaskId) return [];\n\nconst ghToClickupUser = {\n  'dheerajchand': 95317754,\n  'steveblackmon': 192189161\n};\n\nconst clickupUserId = ghToClickupUser[data.assigneeLogin];\nif (!clickupUserId) return [];\n\nlet assigneePayload;\nif (data.action === 'assigned') {\n  assigneePayload = { assignees: { add: [clickupUserId], rem: [] } };\n} else {\n  assigneePayload = { assignees: { add: [], rem: [clickupUserId] } };\n}\n\nreturn [{\n  json: {\n    repoTaskId: data.repoTaskId,\n    assigneePayload: assigneePayload\n  }\n}];\n"
+        },
+        "name": "Prepare-Assignee-Update",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1380,
+          760
+        ],
+        "id": "93590568-d60d-40fc-8ae5-c5f9cf94482f"
+      },
+      {
+        "parameters": {
+          "method": "PUT",
+          "url": "=https://api.clickup.com/api/v2/task/{{ $json.repoTaskId }}",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.assigneePayload) }}",
+          "options": {}
+        },
+        "name": "Update-Repo-Assignees",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1620,
+          760
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "ju5QMIyIYhk1qUcc",
+            "name": "ClickUp API"
+          }
+        },
+        "id": "ad413562-7f4d-4456-96c9-63dfbeb6f129"
+      }
+    ],
+    "connections": {
+      "GitHub-Webhook": {
+        "main": [
+          [
+            {
+              "node": "Anti-Loop-&-Parse",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Anti-Loop-&-Parse": {
+        "main": [
+          [
+            {
+              "node": "Fetch-Repo-P0",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch-Repo-P0": {
+        "main": [
+          [
+            {
+              "node": "Fetch-Repo-P1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch-Repo-P1": {
+        "main": [
+          [
+            {
+              "node": "Resolve-Task-IDs",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Resolve-Task-IDs": {
+        "main": [
+          [
+            {
+              "node": "Route-by-Action",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Route-by-Action": {
+        "main": [
+          [
+            {
+              "node": "Prepare-Create",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Prepare-Close",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Prepare-Reopen",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Prepare-Label-Update",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Prepare-Label-Update",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Prepare-Comment",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Prepare-Assignee-Update",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Prepare-Assignee-Update",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare-Create": {
+        "main": [
+          [
+            {
+              "node": "Create-Repo-Task",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare-Close": {
+        "main": [
+          [
+            {
+              "node": "Close-Repo-Task",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare-Reopen": {
+        "main": [
+          [
+            {
+              "node": "Reopen-Repo-Task",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare-Label-Update": {
+        "main": [
+          [
+            {
+              "node": "Update-Repo-Status",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare-Comment": {
+        "main": [
+          [
+            {
+              "node": "Comment-Repo-Task",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare-Assignee-Update": {
+        "main": [
+          [
+            {
+              "node": "Update-Repo-Assignees",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Steve Blackmon",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-02-18T16:22:15.262Z",
+        "id": 21,
+        "workflowId": "xZIFTqprPeDRyKBL",
+        "versionId": "85a5465c-a208-4400-8ce5-5a2bd2051ab6",
+        "event": "activated",
+        "userId": "c193aa40-67c7-4f61-b91b-d7ee3c55d2fb"
+      }
+    ]
+  }
 }
