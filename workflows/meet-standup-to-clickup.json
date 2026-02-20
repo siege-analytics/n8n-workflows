@@ -1,0 +1,163 @@
+{
+  "name": "Google Meet Standup → ClickUp Docs",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "value": "YOUR_MEET_NOTES_FOLDER_ID",
+          "mode": "id"
+        },
+        "event": "fileCreated",
+        "options": {}
+      },
+      "name": "Watch Meet Notes Folder",
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "id": "d7a1e001-meet-4000-8000-000000000001",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Drive OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.mimeType }}",
+              "operation": "equal",
+              "value2": "application/vnd.google-apps.document"
+            }
+          ]
+        }
+      },
+      "name": "Is Google Doc?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "id": "d7a1e002-meet-4000-8000-000000000002"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://www.googleapis.com/drive/v3/files/{{ $json.id }}/export?mimeType=text%2Fplain",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "name": "Export Doc as Text",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300],
+      "id": "d7a1e003-meet-4000-8000-000000000003",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Drive OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get file metadata from the trigger node\nconst trigger = $('Watch Meet Notes Folder').first().json;\nconst exportData = $input.first().json;\n\n// Extract plain text content from the export response\nconst textContent = typeof exportData === 'string'\n  ? exportData\n  : (exportData.data || exportData.body || '');\n\n// Build doc metadata\nconst fileName = trigger.name || 'Untitled Meeting';\nconst now = new Date();\nconst isoDate = now.toISOString().split('T')[0];\nconst displayDate = now.toLocaleDateString('en-US', {\n  weekday: 'long',\n  year: 'numeric',\n  month: 'long',\n  day: 'numeric'\n});\n\nconst docName = `Daily Standup \\u2014 ${isoDate}`;\n\n// Format content as markdown\nconst content = [\n  `# ${docName}`,\n  '',\n  `**Source:** ${fileName}`,\n  `**Date:** ${displayDate}`,\n  '',\n  '---',\n  '',\n  textContent\n].join('\\n');\n\nreturn [{\n  json: {\n    payload: {\n      name: docName,\n      description: `Standup notes from Google Meet (${isoDate})`,\n      content: content,\n      parent: {\n        id: '90173963039',\n        type: 4\n      }\n    }\n  }\n}];\n"
+      },
+      "name": "Format for ClickUp",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300],
+      "id": "d7a1e004-meet-4000-8000-000000000004"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.clickup.com/api/v3/workspaces/9017833757/docs",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.payload) }}"
+      },
+      "name": "Create ClickUp Doc",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300],
+      "id": "d7a1e005-meet-4000-8000-000000000005",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ju5QMIyIYhk1qUcc",
+          "name": "ClickUp API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Watch Meet Notes Folder": {
+      "main": [
+        [
+          {
+            "node": "Is Google Doc?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Google Doc?": {
+      "main": [
+        [
+          {
+            "node": "Export Doc as Text",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Export Doc as Text": {
+      "main": [
+        [
+          {
+            "node": "Format for ClickUp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format for ClickUp": {
+      "main": [
+        [
+          {
+            "node": "Create ClickUp Doc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}
