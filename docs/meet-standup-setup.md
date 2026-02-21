@@ -121,6 +121,76 @@ The ClickUp Docs API v3 may not accept the `parent` field. If you get a 400 erro
   ```
 - Note: static data may not persist across n8n CE restarts
 
+## Backfill Existing Notes
+
+The n8n workflow only captures *new* docs going forward. To backfill existing
+meeting notes already in the Google Drive folder, use the standalone Python script:
+
+```
+scripts/backfill-standup-notes.py
+```
+
+### Prerequisites
+
+**Google Drive auth** (Application Default Credentials):
+```bash
+gcloud auth application-default login \
+    --no-browser \
+    --scopes=https://www.googleapis.com/auth/drive.readonly
+```
+This shows a URL to visit on any browser. After authorizing, paste the code back.
+Creates `~/.config/gcloud/application_default_credentials.json` which the Google
+API client picks up automatically.
+
+**ClickUp API token** — one of:
+- Environment variable: `export CLICKUP_API_TOKEN=pk_xxx`
+- 1Password: `eval $(op signin)` — the script reads from the `ClickUp API Token` item
+
+**Python packages** (should already be installed):
+```bash
+pip install google-api-python-client google-auth requests
+```
+
+### Usage
+
+```bash
+# Dry run — list docs that would be processed
+python scripts/backfill-standup-notes.py --dry-run
+
+# Full backfill
+python scripts/backfill-standup-notes.py
+
+# Custom folder/target
+python scripts/backfill-standup-notes.py \
+    --folder-id XXX \
+    --clickup-parent-id YYY
+
+# Re-process everything (clear state)
+python scripts/backfill-standup-notes.py --reset-state
+```
+
+### Options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--dry-run` | — | List docs without creating ClickUp Docs |
+| `--folder-id` | `1OFRQrDFm1buSwdh2IX_YbkWAaWfge4bk` | Google Drive folder ID |
+| `--workspace-id` | `9017833757` | ClickUp workspace ID |
+| `--clickup-parent-id` | `90173963039` | ClickUp parent (subfolder) ID |
+| `--clickup-parent-type` | `5` (Folder) | ClickUp parent type (4=Space, 5=Folder, 6=List) |
+| `--filter` | `Daily Standup and Checkin` | Name filter for Google Docs |
+| `--reset-state` | — | Clear processed-IDs state before running |
+
+### Idempotency
+
+The script tracks processed Google Doc IDs in `~/.cache/standup-backfill-state.json`.
+Re-running the script skips already-processed docs. Use `--reset-state` to clear
+the state and re-process everything.
+
+### Rate Limiting
+
+The script sleeps 0.6s between ClickUp API calls (100 req/min limit).
+
 ## Polling Interval
 
 Default: every 1 minute. For daily standups this is more frequent than needed.
