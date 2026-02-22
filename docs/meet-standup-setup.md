@@ -2,18 +2,44 @@
 
 Workflow: `workflows/meet-standup-to-clickup.json`
 
-Watches Google Drive for Gemini-generated meeting notes from Google Meet,
-exports them as text, and creates a ClickUp Doc in the Daily Standup Notes space.
+Polls Google Drive hourly for Gemini-generated meeting notes from Google Meet,
+compares against existing ClickUp Docs, and creates only the missing ones.
+This **poll-and-reconcile** approach eliminates gaps from downtime or missed triggers —
+every run is a full sync.
 
 ## Flow
 
 ```
-Watch Meet Notes Folder (Google Drive Trigger)
-  → Is Google Doc? (If — skips .mp4 recordings)
-  → Export Doc as Text (HTTP Request → Google Drive export API)
+Schedule Trigger (every hour)
+  → List Drive Docs (HTTP Request → Google Drive API)
+  → List ClickUp Docs (HTTP Request → ClickUp API v3)
+  → Find Missing Docs (Code — name-based dedup)
+  → Export Doc as Text (HTTP Request → Google Drive export API, batched)
   → Format for ClickUp (Code — builds markdown doc payload)
-  → Create ClickUp Doc (HTTP Request → ClickUp API v3)
+  → Create ClickUp Doc (HTTP Request → ClickUp API v3, batched)
 ```
+
+## How It Works
+
+1. **Schedule Trigger** fires every hour
+2. **List Drive Docs** queries all Google Docs in the Meet Notes folder matching
+   "Daily Standup and Checkin"
+3. **List ClickUp Docs** queries all existing docs in the target ClickUp folder
+4. **Find Missing Docs** compares the two lists by name:
+   - For each Drive doc, computes the expected ClickUp name: `Daily Standup and Checkin — YYYY-MM-DD`
+     (using the Drive file's `createdTime`, not "today")
+   - Returns only Drive docs whose expected name doesn't exist in ClickUp yet
+   - If all docs are already synced, returns empty → downstream nodes skip gracefully
+5. **Export Doc as Text** fetches the plain text content of each missing doc (1 req/sec)
+6. **Format for ClickUp** builds the markdown payload with header, source, date, and body
+7. **Create ClickUp Doc** creates each doc in ClickUp (1 req/sec)
+
+### Key Properties
+
+- **Stateless dedup**: No persistent state needed — queries both APIs every run
+- **Idempotent**: Safe to re-run; duplicate runs within the hour produce zero double-creates
+- **Historical dates**: Uses `createdTime` from Drive, so backfilled docs get correct dates
+- **Sequential processing**: Batched HTTP requests with 1-second intervals respect rate limits
 
 ## Prerequisites
 
@@ -52,12 +78,20 @@ Find the folder ID for your Meet Notes folder:
 
 After importing the workflow, update these placeholder values:
 
-### Node: "Watch Meet Notes Folder"
+### Node: "List Drive Docs"
 
 | Parameter | Value to Set |
 |-----------|-------------|
-| `folderToWatch.value` | Your Google Drive Meet Notes folder ID |
+| `queryParameters[0].value` (the `q` param) | Update the folder ID in the query string |
 | `credentials.googleDriveOAuth2Api.id` | Your n8n Google Drive credential ID |
+
+### Node: "List ClickUp Docs"
+
+| Parameter | Value to Set |
+|-----------|-------------|
+| `queryParameters[0].value` (`parent.id`) | ClickUp parent folder ID |
+| `queryParameters[1].value` (`parent.type`) | `5` for Folder, `4` for Space, `6` for List |
+| `credentials.httpHeaderAuth.id` | Your n8n ClickUp credential ID |
 
 ### Node: "Export Doc as Text"
 
@@ -65,15 +99,17 @@ After importing the workflow, update these placeholder values:
 |-----------|-------------|
 | `credentials.googleDriveOAuth2Api.id` | Same Google Drive credential ID |
 
-### Node: "Format for ClickUp"
+### Node: "Find Missing Docs" (Code)
 
-The Code node has these hardcoded values you may want to adjust:
+The name pattern is hardcoded: `Daily Standup and Checkin — YYYY-MM-DD`. Change the
+template literal in the Code node if your meeting has a different name.
+
+### Node: "Format for ClickUp" (Code)
 
 | Variable | Current Value | Purpose |
 |----------|--------------|---------|
-| `parent.id` | `90173963039` | ClickUp Space ID for Daily Standup Notes |
-| `parent.type` | `4` | ClickUp parent type (4 = Space) |
-| Doc name prefix | `Daily Standup` | Change if your meeting has a different name |
+| `parent.id` | `90173963039` | ClickUp folder ID for Daily Standup Notes |
+| `parent.type` | `5` | ClickUp parent type (5 = Folder) |
 
 ### Node: "Create ClickUp Doc"
 
@@ -83,115 +119,99 @@ The Code node has these hardcoded values you may want to adjust:
 
 ## ClickUp IDs
 
-Extracted from the provided URL `https://app.clickup.com/9017833757/v/s/90173963039`:
+Extracted from the ClickUp URL `https://app.clickup.com/9017833757/v/f/90176857901/90173963039`:
 
 - **Workspace ID:** `9017833757`
-- **Space ID:** `90173963039` (Daily Standup Notes)
+- **Folder ID:** `90176857901`
+- **Subfolder ID:** `90173963039` (Daily Standup Notes — used as `parent.id`)
 
 ## Troubleshooting
+
+### No new docs created when expected
+
+1. Check the "List Drive Docs" node output — does it return files?
+2. Check the "List ClickUp Docs" node output — does it return existing docs?
+3. Check "Find Missing Docs" output — are there items in the missing list?
+4. Verify the name pattern matches: the expected ClickUp name is
+   `Daily Standup and Checkin — YYYY-MM-DD` (em dash, not hyphen)
 
 ### `parent` field rejected by ClickUp API
 
 The ClickUp Docs API v3 may not accept the `parent` field. If you get a 400 error:
 1. Open the "Format for ClickUp" Code node
 2. Remove the `parent` property from the payload object
-3. The doc will be created at workspace level — move it to the correct space manually
+3. The doc will be created at workspace level — move it to the correct folder manually
 4. Alternatively, try `parent.type` values: `4` (Space), `5` (Folder), `6` (List)
 
-### Google Drive trigger not firing
+### Google Drive API returns empty
 
-- Verify the folder ID is correct (test by manually creating a file in the folder)
+- Verify the folder ID is correct (test by manually listing files in the folder)
 - Check that the Google Drive OAuth2 credential has `drive.readonly` or `drive` scope
-- n8n CE polling can lag — check Settings → Executions for errors
+- The query filter requires `mimeType='application/vnd.google-apps.document'` — non-Doc
+  files (e.g., .mp4 recordings) are excluded by the API query
 
 ### Export returns empty content
 
 - Gemini notes may take a few minutes to fully generate after the meeting ends
 - The Google Docs export API requires `https://www.googleapis.com/auth/drive` scope
-- If the file isn't a Google Doc (e.g., recording .mp4), the If node should filter it out
+- Check the "Export Doc as Text" node output for error responses
 
-### Duplicate docs in ClickUp
+### Rate limiting / 429 errors
 
-- If the trigger fires multiple times for the same file, duplicates will be created
-- To add dedup: in the Code node, add a static data check:
-  ```javascript
-  const seen = $getWorkflowStaticData('global');
-  if (seen[trigger.id]) return [];
-  seen[trigger.id] = true;
-  ```
-- Note: static data may not persist across n8n CE restarts
+- Both Export and Create nodes are batched at 1 request per second
+- ClickUp rate limit: 100 requests/minute
+- If you hit limits, increase `batchInterval` in the HTTP Request node options
 
-## Backfill Existing Notes
+### ClickUp pagination
 
-The n8n workflow only captures *new* docs going forward. To backfill existing
-meeting notes already in the Google Drive folder, use the standalone Python script:
+- The "List ClickUp Docs" node fetches one page of results (typically ~100 docs)
+- For daily standups this is sufficient for months of history
+- If you accumulate >100 docs, update the "Find Missing Docs" Code node to handle
+  pagination (fetch multiple pages from ClickUp before building the name set)
 
-```
-scripts/backfill-standup-notes.py
-```
+## Polling Interval
 
-### Prerequisites
+Default: every 1 hour. For daily standups this is more than sufficient — meetings
+happen once per day, and the reconciliation approach means nothing is missed even
+if a cycle is skipped.
 
-**Google Drive auth** (Application Default Credentials):
-```bash
-gcloud auth application-default login \
-    --no-browser \
-    --scopes=https://www.googleapis.com/auth/drive.readonly
-```
-This shows a URL to visit on any browser. After authorizing, paste the code back.
-Creates `~/.config/gcloud/application_default_credentials.json` which the Google
-API client picks up automatically.
+To change the interval, edit the "Schedule Trigger" node:
+- In n8n UI: click the node → change interval
+- In JSON: modify `rule.interval[0].hoursInterval` or change `field` to `"minutes"`
 
-**ClickUp API token** — one of:
-- Environment variable: `export CLICKUP_API_TOKEN=pk_xxx`
-- 1Password: `eval $(op signin)` — the script reads from the `ClickUp API Token` item
+## CLI Debugging Tool
 
-**Python packages** (should already be installed):
-```bash
-pip install google-api-python-client google-auth requests
-```
-
-### Usage
+The standalone Python script `scripts/backfill-standup-notes.py` remains available
+as a CLI debugging and one-time migration tool. It is no longer needed for ongoing
+sync — the workflow handles both new and historical docs automatically.
 
 ```bash
 # Dry run — list docs that would be processed
 python scripts/backfill-standup-notes.py --dry-run
 
-# Full backfill
+# Full backfill (uses local state file for idempotency)
 python scripts/backfill-standup-notes.py
 
-# Custom folder/target
-python scripts/backfill-standup-notes.py \
-    --folder-id XXX \
-    --clickup-parent-id YYY
-
-# Re-process everything (clear state)
-python scripts/backfill-standup-notes.py --reset-state
+# See all options
+python scripts/backfill-standup-notes.py --help
 ```
 
-### Options
+## Deployment
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--dry-run` | — | List docs without creating ClickUp Docs |
-| `--folder-id` | `1OFRQrDFm1buSwdh2IX_YbkWAaWfge4bk` | Google Drive folder ID |
-| `--workspace-id` | `9017833757` | ClickUp workspace ID |
-| `--clickup-parent-id` | `90173963039` | ClickUp parent (subfolder) ID |
-| `--clickup-parent-type` | `5` (Folder) | ClickUp parent type (4=Space, 5=Folder, 6=List) |
-| `--filter` | `Daily Standup and Checkin` | Name filter for Google Docs |
-| `--reset-state` | — | Clear processed-IDs state before running |
+Deploy the workflow to n8n via API PUT:
 
-### Idempotency
+```bash
+# Get the workflow ID from n8n
+curl -s -H "X-N8N-API-KEY: $N8N_API_KEY" \
+  https://n8n.example.com/api/v1/workflows | \
+  jq '.data[] | select(.name | contains("Standup")) | .id'
 
-The script tracks processed Google Doc IDs in `~/.cache/standup-backfill-state.json`.
-Re-running the script skips already-processed docs. Use `--reset-state` to clear
-the state and re-process everything.
+# Update the workflow
+curl -X PUT \
+  -H "X-N8N-API-KEY: $N8N_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d @workflows/meet-standup-to-clickup.json \
+  https://n8n.example.com/api/v1/workflows/<WORKFLOW_ID>
+```
 
-### Rate Limiting
-
-The script sleeps 0.6s between ClickUp API calls (100 req/min limit).
-
-## Polling Interval
-
-Default: every 1 minute. For daily standups this is more frequent than needed.
-To reduce API calls, change the trigger's `pollTimes` to every 5 or 15 minutes in the UI.
+Then activate it in the n8n UI or via API.
