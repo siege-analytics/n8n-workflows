@@ -5,9 +5,9 @@ One-time script that reads all "Daily Standup and Checkin" Google Docs
 from a Google Drive folder and creates corresponding ClickUp Docs.
 
 Prerequisites:
-    gcloud auth application-default login \
-        --scopes=https://www.googleapis.com/auth/drive.readonly
-    export CLICKUP_API_TOKEN=pk_xxx  # or sign into 1Password
+    gcloud auth application-default login --no-browser \
+        --scopes=https://www.googleapis.com/auth/drive.readonly,https://www.googleapis.com/auth/cloud-platform
+    export CLICKUP_API_TOKEN=pk_xxx
 
 Usage:
     python scripts/backfill-standup-notes.py --dry-run
@@ -24,10 +24,9 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import quote, urlencode
 
 import requests
-import google.auth
-from googleapiclient.discovery import build
 
 # ---------------------------------------------------------------------------
 # Defaults (match n8n workflow: meet-standup-to-clickup.json)
@@ -35,11 +34,14 @@ from googleapiclient.discovery import build
 DEFAULT_FOLDER_ID = "1OFRQrDFm1buSwdh2IX_YbkWAaWfge4bk"
 DEFAULT_WORKSPACE_ID = "9017833757"
 DEFAULT_PARENT_ID = "90173963039"  # subfolder inside 90176857901
-DEFAULT_PARENT_TYPE = 5            # Folder
+DEFAULT_PARENT_TYPE = 4            # Space
 DEFAULT_NAME_FILTER = "Daily Standup and Checkin"
 
+DRIVE_API = "https://www.googleapis.com/drive/v3"
 CLICKUP_DOCS_URL = "https://api.clickup.com/api/v3/workspaces/{workspace}/docs"
 STATE_FILE = Path.home() / ".cache" / "standup-backfill-state.json"
+ADC_FILE = Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
+TOKEN_URL = "https://oauth2.googleapis.com/token"
 
 # ClickUp rate limit: 100 req/min → 0.6s between requests
 RATE_LIMIT_DELAY = 0.6
@@ -49,12 +51,38 @@ RATE_LIMIT_DELAY = 0.6
 # Auth helpers
 # ---------------------------------------------------------------------------
 
-def get_drive_service():
-    """Build a Google Drive v3 service using Application Default Credentials."""
-    creds, _ = google.auth.default(
-        scopes=["https://www.googleapis.com/auth/drive.readonly"]
-    )
-    return build("drive", "v3", credentials=creds)
+GCP_QUOTA_PROJECT = "gold-box-488021-d9"
+
+
+def get_google_access_token() -> str:
+    """Get a Google OAuth2 access token from gcloud ADC credentials."""
+    if not ADC_FILE.exists():
+        print(
+            f"ERROR: No credentials found at {ADC_FILE}\n"
+            "Run: gcloud auth application-default login --no-browser "
+            "--scopes=https://www.googleapis.com/auth/drive.readonly,"
+            "https://www.googleapis.com/auth/cloud-platform",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    adc = json.loads(ADC_FILE.read_text())
+    resp = requests.post(TOKEN_URL, data={
+        "client_id": adc["client_id"],
+        "client_secret": adc["client_secret"],
+        "refresh_token": adc["refresh_token"],
+        "grant_type": "refresh_token",
+    }, timeout=15)
+    resp.raise_for_status()
+    return resp.json()["access_token"]
+
+
+def _drive_headers(access_token: str) -> dict[str, str]:
+    """Headers for Google Drive API calls, including quota project."""
+    return {
+        "Authorization": f"Bearer {access_token}",
+        "x-goog-user-project": GCP_QUOTA_PROJECT,
+    }
 
 
 def get_clickup_token() -> str:
@@ -82,7 +110,7 @@ def get_clickup_token() -> str:
 
     print(
         "ERROR: No ClickUp API token found.\n"
-        "Set CLICKUP_API_TOKEN env var or sign into 1Password (eval $(op signin)).",
+        "Set CLICKUP_API_TOKEN env var.",
         file=sys.stderr,
     )
     sys.exit(1)
@@ -110,10 +138,10 @@ def save_state(processed_ids: set[str]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Google Drive operations
+# Google Drive operations (raw HTTP, no googleapiclient)
 # ---------------------------------------------------------------------------
 
-def list_standup_docs(service, folder_id: str, name_filter: str) -> list[dict]:
+def list_standup_docs(access_token: str, folder_id: str, name_filter: str) -> list[dict]:
     """List all Google Docs in folder matching the name filter."""
     query = (
         f"'{folder_id}' in parents"
@@ -121,32 +149,47 @@ def list_standup_docs(service, folder_id: str, name_filter: str) -> list[dict]:
         f" and name contains '{name_filter}'"
         f" and trashed=false"
     )
+    headers = _drive_headers(access_token)
     docs = []
     page_token = None
 
     while True:
-        resp = service.files().list(
-            q=query,
-            fields="nextPageToken, files(id, name, createdTime, modifiedTime)",
-            pageSize=100,
-            pageToken=page_token,
-            orderBy="createdTime",
-        ).execute()
+        params = {
+            "q": query,
+            "fields": "nextPageToken, files(id, name, createdTime, modifiedTime)",
+            "pageSize": 100,
+            "orderBy": "createdTime",
+        }
+        if page_token:
+            params["pageToken"] = page_token
 
-        docs.extend(resp.get("files", []))
-        page_token = resp.get("nextPageToken")
+        resp = requests.get(
+            f"{DRIVE_API}/files",
+            headers=headers,
+            params=params,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        docs.extend(data.get("files", []))
+        page_token = data.get("nextPageToken")
         if not page_token:
             break
 
     return docs
 
 
-def export_doc_as_text(service, doc_id: str) -> str:
+def export_doc_as_text(access_token: str, doc_id: str) -> str:
     """Export a Google Doc as plain text."""
-    return service.files().export(
-        fileId=doc_id,
-        mimeType="text/plain",
-    ).execute().decode("utf-8")
+    resp = requests.get(
+        f"{DRIVE_API}/files/{doc_id}/export",
+        headers=_drive_headers(access_token),
+        params={"mimeType": "text/plain"},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return resp.text
 
 
 # ---------------------------------------------------------------------------
@@ -195,7 +238,6 @@ def format_doc(file_name: str, created_time: str, text_content: str) -> tuple[st
 
     Returns (doc_name, description, content).
     """
-    # Parse the creation date from Drive metadata
     dt = datetime.fromisoformat(created_time.replace("Z", "+00:00"))
     iso_date = dt.strftime("%Y-%m-%d")
     display_date = dt.strftime("%A, %B %-d, %Y")
@@ -272,7 +314,7 @@ def main() -> None:
 
     # --- Auth ---
     print("Authenticating to Google Drive...")
-    drive = get_drive_service()
+    access_token = get_google_access_token()
 
     if not args.dry_run:
         print("Retrieving ClickUp API token...")
@@ -280,7 +322,7 @@ def main() -> None:
 
     # --- List docs ---
     print(f"Listing docs in folder {args.folder_id} matching '{args.filter}'...")
-    docs = list_standup_docs(drive, args.folder_id, args.filter)
+    docs = list_standup_docs(access_token, args.folder_id, args.filter)
     print(f"Found {len(docs)} matching doc(s) in Google Drive.")
 
     if not docs:
@@ -318,7 +360,7 @@ def main() -> None:
 
         try:
             # Export from Google Drive
-            text = export_doc_as_text(drive, doc["id"])
+            text = export_doc_as_text(access_token, doc["id"])
             doc_name, description, content = format_doc(
                 doc["name"], doc["createdTime"], text
             )
