@@ -74,7 +74,7 @@
             },
             {
               "name": "parent.type",
-              "value": "5"
+              "value": "4"
             }
           ]
         },
@@ -97,7 +97,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Get all matching Google Docs from Drive\nconst driveResponse = $('List Drive Docs').first().json;\nconst driveFiles = driveResponse.files || [];\n\n// Get existing ClickUp Docs\nconst clickupResponse = $('List ClickUp Docs').first().json;\nconst clickupDocs = clickupResponse.docs || [];\n\n// Build set of existing ClickUp doc names for O(1) lookup\nconst existingNames = new Set(clickupDocs.map(d => d.name));\n\n// Find Drive docs whose expected ClickUp name doesn't exist yet\nconst missing = [];\nfor (const file of driveFiles) {\n  const created = new Date(file.createdTime);\n  const isoDate = created.toISOString().split('T')[0];\n  const expectedName = `Daily Standup and Checkin \\u2014 ${isoDate}`;\n\n  if (!existingNames.has(expectedName)) {\n    missing.push({\n      json: {\n        id: file.id,\n        name: file.name,\n        createdTime: file.createdTime,\n        expectedName: expectedName\n      }\n    });\n  }\n}\n\nreturn missing;\n"
+        "jsCode": "// Get all matching Google Docs from Drive\nconst driveResponse = $('List Drive Docs').first().json;\nconst driveFiles = driveResponse.files || [];\n\n// Get existing ClickUp Docs\nconst clickupResponse = $('List ClickUp Docs').first().json;\nconst clickupDocs = clickupResponse.docs || [];\n\n// Build set of existing ClickUp doc names for O(1) lookup\nconst existingNames = new Set(clickupDocs.map(d => d.name));\n\n// Find Drive docs whose expected ClickUp name doesn't exist yet\nconst missing = [];\nfor (const file of driveFiles) {\n  const created = new Date(file.createdTime);\n  const isoDate = created.toISOString().split('T')[0];\n  const expectedName = `Daily Standup \\u2014 ${isoDate}`;\n\n  if (!existingNames.has(expectedName)) {\n    missing.push({\n      json: {\n        id: file.id,\n        name: file.name,\n        createdTime: file.createdTime,\n        expectedName: expectedName\n      }\n    });\n  }\n}\n\nreturn missing;\n"
       },
       "name": "Find Missing Docs",
       "type": "n8n-nodes-base.code",
@@ -144,7 +144,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const items = $input.all();\nconst driveItems = $('Find Missing Docs').all();\n\nconst results = [];\nfor (let i = 0; i < items.length; i++) {\n  const exportData = items[i].json;\n  const driveItem = driveItems[i].json;\n\n  // Extract plain text from export response\n  const textContent = typeof exportData === 'string'\n    ? exportData\n    : (exportData.data || exportData.body || '');\n\n  // Use createdTime from Drive (not 'now') for historical accuracy\n  const created = new Date(driveItem.createdTime);\n  const isoDate = created.toISOString().split('T')[0];\n  const displayDate = created.toLocaleDateString('en-US', {\n    weekday: 'long',\n    year: 'numeric',\n    month: 'long',\n    day: 'numeric'\n  });\n\n  const docName = driveItem.expectedName;\n\n  const content = [\n    `# ${docName}`,\n    '',\n    `**Source:** ${driveItem.name}`,\n    `**Date:** ${displayDate}`,\n    '',\n    '---',\n    '',\n    textContent\n  ].join('\\n');\n\n  results.push({\n    json: {\n      payload: {\n        name: docName,\n        description: `Standup notes from Google Meet (${isoDate})`,\n        content: content,\n        parent: {\n          id: '90173963039',\n          type: 5\n        }\n      }\n    }\n  });\n}\n\nreturn results;\n"
+        "jsCode": "const items = $input.all();\nconst driveItems = $('Find Missing Docs').all();\n\nconst results = [];\nfor (let i = 0; i < items.length; i++) {\n  const exportData = items[i].json;\n  const driveItem = driveItems[i].json;\n\n  // Extract plain text from export response\n  const textContent = typeof exportData === 'string'\n    ? exportData\n    : (exportData.data || exportData.body || '');\n\n  // Use createdTime from Drive (not 'now') for historical accuracy\n  const created = new Date(driveItem.createdTime);\n  const isoDate = created.toISOString().split('T')[0];\n  const displayDate = created.toLocaleDateString('en-US', {\n    weekday: 'long',\n    year: 'numeric',\n    month: 'long',\n    day: 'numeric'\n  });\n\n  const docName = driveItem.expectedName;\n\n  const content = [\n    `# ${docName}`,\n    '',\n    `**Source:** ${driveItem.name}`,\n    `**Date:** ${displayDate}`,\n    '',\n    '---',\n    '',\n    textContent\n  ].join('\\n');\n\n  results.push({\n    json: {\n      payload: {\n        name: docName,\n        description: `Standup notes from Google Meet (${isoDate})`,\n        content: content,\n        parent: {\n          id: '90173963039',\n          type: 4\n        }\n      }\n    }\n  });\n}\n\nreturn results;\n"
       },
       "name": "Format for ClickUp",
       "type": "n8n-nodes-base.code",
