@@ -26,7 +26,7 @@ Schedule Trigger (every hour)
    "Daily Standup and Checkin"
 3. **List ClickUp Docs** queries all existing docs in the target ClickUp folder
 4. **Find Missing Docs** compares the two lists by name:
-   - For each Drive doc, computes the expected ClickUp name: `Daily Standup and Checkin — YYYY-MM-DD`
+   - For each Drive doc, computes the expected ClickUp name: `Daily Standup — YYYY-MM-DD`
      (using the Drive file's `createdTime`, not "today")
    - Returns only Drive docs whose expected name doesn't exist in ClickUp yet
    - If all docs are already synced, returns empty → downstream nodes skip gracefully
@@ -90,7 +90,7 @@ After importing the workflow, update these placeholder values:
 | Parameter | Value to Set |
 |-----------|-------------|
 | `queryParameters[0].value` (`parent.id`) | ClickUp parent folder ID |
-| `queryParameters[1].value` (`parent.type`) | `5` for Folder, `4` for Space, `6` for List |
+| `queryParameters[1].value` (`parent.type`) | `4` (Space). Other options: `5` (Folder), `6` (List) |
 | `credentials.httpHeaderAuth.id` | Your n8n ClickUp credential ID |
 
 ### Node: "Export Doc as Text"
@@ -101,15 +101,15 @@ After importing the workflow, update these placeholder values:
 
 ### Node: "Find Missing Docs" (Code)
 
-The name pattern is hardcoded: `Daily Standup and Checkin — YYYY-MM-DD`. Change the
+The name pattern is hardcoded: `Daily Standup — YYYY-MM-DD`. Change the
 template literal in the Code node if your meeting has a different name.
 
 ### Node: "Format for ClickUp" (Code)
 
 | Variable | Current Value | Purpose |
 |----------|--------------|---------|
-| `parent.id` | `90173963039` | ClickUp folder ID for Daily Standup Notes |
-| `parent.type` | `5` | ClickUp parent type (5 = Folder) |
+| `parent.id` | `90173963039` | ClickUp Space ID for Daily Standup Notes |
+| `parent.type` | `4` | ClickUp parent type (4 = Space) |
 
 ### Node: "Create ClickUp Doc"
 
@@ -133,7 +133,7 @@ Extracted from the ClickUp URL `https://app.clickup.com/9017833757/v/f/901768579
 2. Check the "List ClickUp Docs" node output — does it return existing docs?
 3. Check "Find Missing Docs" output — are there items in the missing list?
 4. Verify the name pattern matches: the expected ClickUp name is
-   `Daily Standup and Checkin — YYYY-MM-DD` (em dash, not hyphen)
+   `Daily Standup — YYYY-MM-DD` (em dash, not hyphen)
 
 ### `parent` field rejected by ClickUp API
 
