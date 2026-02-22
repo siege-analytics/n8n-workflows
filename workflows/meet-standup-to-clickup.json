@@ -70,11 +70,11 @@
           "parameters": [
             {
               "name": "parent.id",
-              "value": "90173963039"
+              "value": "90176857901"
             },
             {
               "name": "parent.type",
-              "value": "4"
+              "value": "5"
             }
           ]
         },
@@ -144,7 +144,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const items = $input.all();\nconst driveItems = $('Find Missing Docs').all();\n\nconst results = [];\nfor (let i = 0; i < items.length; i++) {\n  const exportData = items[i].json;\n  const driveItem = driveItems[i].json;\n\n  // Extract plain text from export response\n  const textContent = typeof exportData === 'string'\n    ? exportData\n    : (exportData.data || exportData.body || '');\n\n  // Use createdTime from Drive (not 'now') for historical accuracy\n  const created = new Date(driveItem.createdTime);\n  const isoDate = created.toISOString().split('T')[0];\n  const displayDate = created.toLocaleDateString('en-US', {\n    weekday: 'long',\n    year: 'numeric',\n    month: 'long',\n    day: 'numeric'\n  });\n\n  const docName = driveItem.expectedName;\n\n  const content = [\n    `# ${docName}`,\n    '',\n    `**Source:** ${driveItem.name}`,\n    `**Date:** ${displayDate}`,\n    '',\n    '---',\n    '',\n    textContent\n  ].join('\\n');\n\n  results.push({\n    json: {\n      payload: {\n        name: docName,\n        description: `Standup notes from Google Meet (${isoDate})`,\n        content: content,\n        parent: {\n          id: '90173963039',\n          type: 4\n        }\n      }\n    }\n  });\n}\n\nreturn results;\n"
+        "jsCode": "const items = $input.all();\nconst driveItems = $('Find Missing Docs').all();\n\nconst results = [];\nfor (let i = 0; i < items.length; i++) {\n  const exportData = items[i].json;\n  const driveItem = driveItems[i].json;\n\n  // Extract plain text from export response\n  const textContent = typeof exportData === 'string'\n    ? exportData\n    : (exportData.data || exportData.body || '');\n\n  // Use createdTime from Drive (not 'now') for historical accuracy\n  const created = new Date(driveItem.createdTime);\n  const isoDate = created.toISOString().split('T')[0];\n  const displayDate = created.toLocaleDateString('en-US', {\n    weekday: 'long',\n    year: 'numeric',\n    month: 'long',\n    day: 'numeric'\n  });\n\n  const docName = driveItem.expectedName;\n\n  const content = [\n    `# ${docName}`,\n    '',\n    `**Source:** ${driveItem.name}`,\n    `**Date:** ${displayDate}`,\n    '',\n    '---',\n    '',\n    textContent\n  ].join('\\n');\n\n  results.push({\n    json: {\n      payload: {\n        name: docName,\n        description: `Standup notes from Google Meet (${isoDate})`,\n        content: content,\n        parent: {\n          id: '90176857901',\n          type: 5\n        }\n      }\n    }\n  });\n}\n\nreturn results;\n"
       },
       "name": "Format for ClickUp",
       "type": "n8n-nodes-base.code",
