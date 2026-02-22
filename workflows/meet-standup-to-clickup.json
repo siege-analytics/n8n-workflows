@@ -187,6 +187,52 @@
           "name": "ClickUp API"
         }
       }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst fmtItems = $('Format for ClickUp').all();\n\nconst results = [];\nfor (let i = 0; i < items.length; i++) {\n  const docId = items[i].json.id;\n  const content = fmtItems[i].json.payload.content;\n  const docName = fmtItems[i].json.payload.name;\n\n  results.push({\n    json: {\n      docId: docId,\n      pagePayload: {\n        name: docName,\n        content: content,\n        content_format: 'text/md'\n      }\n    }\n  });\n}\n\nreturn results;\n"
+      },
+      "name": "Build Page Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1380,
+        0
+      ],
+      "id": "f0a1b2c3-1008-4a00-b000-000000000008"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.clickup.com/api/v3/workspaces/9017833757/docs/{{ $json.docId }}/pages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.pagePayload) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1000
+            }
+          }
+        }
+      },
+      "name": "Create Page Content",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1620,
+        0
+      ],
+      "id": "f0a1b2c3-1009-4a00-b000-000000000009",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ju5QMIyIYhk1qUcc",
+          "name": "ClickUp API"
+        }
+      }
     }
   ],
   "connections": {
@@ -250,6 +296,28 @@
         [
           {
             "node": "Create ClickUp Doc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create ClickUp Doc": {
+      "main": [
+        [
+          {
+            "node": "Build Page Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Page Payload": {
+      "main": [
+        [
+          {
+            "node": "Create Page Content",
             "type": "main",
             "index": 0
           }
