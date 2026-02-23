@@ -15,8 +15,7 @@
       "name": "Schedule Trigger",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [-600, 0],
-      "id": "whm-0001-0000-0000-000000000001"
+      "position": [-600, 0]
     },
     {
       "parameters": {
@@ -33,8 +32,7 @@
       "name": "Probe CU-GH Endpoint",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-360, 0],
-      "id": "whm-0001-0000-0000-000000000002"
+      "position": [-360, 0]
     },
     {
       "parameters": {
@@ -51,82 +49,48 @@
       "name": "Probe GH-CU Endpoint",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-120, 0],
-      "id": "whm-0001-0000-0000-000000000003"
+      "position": [-120, 0]
     },
     {
       "parameters": {
-        "jsCode": "// Fetch recent executions from n8n API\n// Uses $getWorkflowStaticData to store the API key (set via rebuild or manual init)\n// Falls back gracefully if API is unreachable\ntry {\n  const response = await this.helpers.httpRequest({\n    method: 'GET',\n    url: 'https://n8n.elect.info/api/v1/executions?limit=20&status=success',\n    headers: {\n      'X-N8N-API-KEY': $env.N8N_API_KEY || ''\n    },\n    returnFullResponse: true,\n    ignoreHttpStatusErrors: true\n  });\n  return [{ json: response.body || response }];\n} catch (e) {\n  // API unreachable — return empty so health check can still evaluate probes\n  return [{ json: { data: [], error: e.message } }];\n}\n"
+        "jsCode": "// Fetch recent executions from n8n API\n// Falls back gracefully if API is unreachable\ntry {\n  const response = await this.helpers.httpRequest({\n    method: 'GET',\n    url: 'https://n8n.elect.info/api/v1/executions?limit=20&status=success',\n    headers: {\n      'X-N8N-API-KEY': $env.N8N_API_KEY || ''\n    },\n    returnFullResponse: true,\n    ignoreHttpStatusErrors: true\n  });\n  return [{ json: response.body || response }];\n} catch (e) {\n  // API unreachable — return empty so health check can still evaluate probes\n  return [{ json: { data: [], error: e.message } }];\n}\n"
       },
       "name": "Fetch Recent Executions",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [120, 0],
-      "id": "whm-0001-0000-0000-000000000004"
+      "position": [120, 0]
     },
     {
       "parameters": {
-        "jsCode": "// Collect probe results — any HTTP response means ingress is up\n// A connection timeout/refused means it's truly down\nconst cuProbe = $('Probe CU-GH Endpoint').first();\nconst ghProbe = $('Probe GH-CU Endpoint').first();\nconst execResponse = $('Fetch Recent Executions').first().json;\n\n// Probe success: we got an HTTP response (even 404/405 = ingress works)\nconst cuProbeOk = cuProbe && cuProbe.json && !cuProbe.json.error;\nconst ghProbeOk = ghProbe && ghProbe.json && !ghProbe.json.error;\n\n// Check for execution gap: any webhook workflow executions in the last 4 hours?\nconst fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();\nconst allExecs = execResponse.data || [];\n// Filter to webhook-triggered workflow executions (not scheduled ones)\nconst recentWebhookExecs = allExecs.filter(e => {\n  const isRecent = e.startedAt > fourHoursAgo;\n  const isWebhook = e.mode === 'webhook';\n  return isRecent && isWebhook;\n});\nconst hasRecentExecs = recentWebhookExecs.length > 0;\n\n// Determine health status\nlet status = 'healthy';\nconst details = [];\n\nif (!cuProbeOk) {\n  status = 'critical';\n  details.push('CU->GH webhook endpoint unreachable');\n}\nif (!ghProbeOk) {\n  status = 'critical';\n  details.push('GH->CU webhook endpoint unreachable');\n}\nif (!hasRecentExecs && status !== 'critical') {\n  status = 'warning';\n  details.push('No webhook-triggered executions in last 4 hours');\n}\n\nif (details.length === 0) {\n  details.push('All probes passed, recent executions found');\n}\n\nreturn [{\n  json: {\n    status: status,\n    details: details.join('; '),\n    cuProbeOk: cuProbeOk,\n    ghProbeOk: ghProbeOk,\n    hasRecentExecs: hasRecentExecs,\n    recentExecCount: recentWebhookExecs.length,\n    checkedAt: new Date().toISOString()\n  }\n}];\n"
+        "jsCode": "// Collect probe results — any HTTP response means ingress is up\nconst cuProbe = $('Probe CU-GH Endpoint').first();\nconst ghProbe = $('Probe GH-CU Endpoint').first();\nconst execResponse = $('Fetch Recent Executions').first().json;\n\nconst cuProbeOk = cuProbe && cuProbe.json && !cuProbe.json.error;\nconst ghProbeOk = ghProbe && ghProbe.json && !ghProbe.json.error;\n\nconst fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();\nconst allExecs = execResponse.data || [];\nconst recentWebhookExecs = allExecs.filter(e => {\n  return e.startedAt > fourHoursAgo && e.mode === 'webhook';\n});\nconst hasRecentExecs = recentWebhookExecs.length > 0;\n\nlet status = 'healthy';\nconst details = [];\n\nif (!cuProbeOk) {\n  status = 'critical';\n  details.push('CU->GH webhook endpoint unreachable');\n}\nif (!ghProbeOk) {\n  status = 'critical';\n  details.push('GH->CU webhook endpoint unreachable');\n}\nif (!hasRecentExecs && status !== 'critical') {\n  status = 'warning';\n  details.push('No webhook-triggered executions in last 4 hours');\n}\nif (details.length === 0) {\n  details.push('All probes passed, recent executions found');\n}\n\nreturn [{\n  json: {\n    status: status,\n    details: details.join('; '),\n    cuProbeOk: cuProbeOk,\n    ghProbeOk: ghProbeOk,\n    hasRecentExecs: hasRecentExecs,\n    recentExecCount: recentWebhookExecs.length,\n    checkedAt: new Date().toISOString()\n  }\n}];\n"
       },
       "name": "Evaluate Health",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [360, 0],
-      "id": "whm-0001-0000-0000-000000000005"
+      "position": [360, 0]
     },
     {
       "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.status }}",
         "rules": {
-          "values": [
+          "rules": [
             {
-              "conditions": {
-                "options": {
-                  "version": 2,
-                  "leftValue": "",
-                  "caseSensitive": true
-                },
-                "combinator": "and",
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.status }}",
-                    "rightValue": "healthy",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  }
-                ]
-              }
+              "value2": "healthy"
             },
             {
-              "conditions": {
-                "options": {
-                  "version": 2,
-                  "leftValue": "",
-                  "caseSensitive": true
-                },
-                "combinator": "and",
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.status }}",
-                    "rightValue": "healthy",
-                    "operator": {
-                      "type": "string",
-                      "operation": "notEquals"
-                    }
-                  }
-                ]
-              }
+              "value2": "critical"
+            },
+            {
+              "value2": "warning"
             }
           ]
-        },
-        "options": {}
+        }
       },
       "name": "Route by Health",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 2,
-      "position": [600, 0],
-      "id": "whm-0001-0000-0000-000000000006"
+      "position": [600, 0]
     },
     {
       "parameters": {
@@ -139,7 +103,6 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [840, -150],
-      "id": "whm-0001-0000-0000-000000000007",
       "credentials": {
         "httpHeaderAuth": {
           "id": "SbQTxL2kanI77ymm",
@@ -149,13 +112,12 @@
     },
     {
       "parameters": {
-        "jsCode": "// Health recovered — post resolution comment + close if there's an open alert\nconst searchResult = $('Search Open Alert (Healthy)').first().json;\nconst healthData = $('Evaluate Health').first().json;\n\nif (!searchResult.total_count || searchResult.total_count === 0) {\n  // No open alert issue — nothing to do\n  return [];\n}\n\nconst issueNumber = searchResult.items[0].number;\nconst now = healthData.checkedAt;\n\nreturn [{\n  json: {\n    issueNumber: issueNumber,\n    commentBody: `## Resolved\\n\\nWebhook health monitor reports all clear at ${now}.\\n\\n- CU->GH probe: OK\\n- GH->CU probe: OK\\n- Recent webhook executions: ${healthData.recentExecCount}\\n\\nAuto-closing this alert.`\n  }\n}];\n"
+        "jsCode": "const searchResult = $('Search Open Alert (Healthy)').first().json;\nconst healthData = $('Evaluate Health').first().json;\n\nif (!searchResult.total_count || searchResult.total_count === 0) {\n  return [];\n}\n\nconst issueNumber = searchResult.items[0].number;\nreturn [{\n  json: {\n    issueNumber: issueNumber,\n    commentBody: `## Resolved\\n\\nWebhook health monitor reports all clear at ${healthData.checkedAt}.\\n\\n- CU->GH probe: OK\\n- GH->CU probe: OK\\n- Recent webhook executions: ${healthData.recentExecCount}\\n\\nAuto-closing this alert.`\n  }\n}];\n"
       },
       "name": "Prepare Resolution",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1080, -150],
-      "id": "whm-0001-0000-0000-000000000008"
+      "position": [1080, -150]
     },
     {
       "parameters": {
@@ -172,7 +134,6 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [1320, -150],
-      "id": "whm-0001-0000-0000-000000000009",
       "credentials": {
         "httpHeaderAuth": {
           "id": "SbQTxL2kanI77ymm",
@@ -195,7 +156,6 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [1560, -150],
-      "id": "whm-0001-0000-0000-000000000010",
       "credentials": {
         "httpHeaderAuth": {
           "id": "SbQTxL2kanI77ymm",
@@ -214,7 +174,6 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [840, 150],
-      "id": "whm-0001-0000-0000-000000000011",
       "credentials": {
         "httpHeaderAuth": {
           "id": "SbQTxL2kanI77ymm",
@@ -224,67 +183,32 @@
     },
     {
       "parameters": {
-        "jsCode": "// Unhealthy — decide whether to create new issue or comment on existing\nconst searchResult = $('Search Open Alert (Unhealthy)').first().json;\nconst healthData = $('Evaluate Health').first().json;\nconst now = healthData.checkedAt;\nconst severity = healthData.status === 'critical' ? 'CRITICAL' : 'WARNING';\n\nconst body = `## ${severity}: Webhook Sync Health Alert\\n\\n**Checked at:** ${now}\\n**Status:** ${healthData.status}\\n**Details:** ${healthData.details}\\n\\n| Check | Result |\\n|-------|--------|\\n| CU->GH Probe | ${healthData.cuProbeOk ? 'OK' : 'FAILED'} |\\n| GH->CU Probe | ${healthData.ghProbeOk ? 'OK' : 'FAILED'} |\\n| Recent Webhook Executions (4h) | ${healthData.recentExecCount} |\\n\\n**Action Required:** Check n8n at https://n8n.elect.info and Traefik ingress for issues.`;\n\nif (searchResult.total_count && searchResult.total_count > 0) {\n  // Existing open alert — add comment\n  return [{\n    json: {\n      action: 'comment',\n      issueNumber: searchResult.items[0].number,\n      commentBody: body\n    }\n  }];\n}\n\n// No existing alert — create new issue\nreturn [{\n  json: {\n    action: 'create',\n    title: `[sync-health] Webhook sync ${healthData.status}: ${healthData.details.substring(0, 80)}`,\n    body: body + '\\n\\n---\\n_This issue was created by the Webhook Health Monitor workflow. It will be auto-closed when health recovers._',\n    labels: ['sync-health-alert']\n  }\n}];\n"
+        "jsCode": "const searchResult = $('Search Open Alert (Unhealthy)').first().json;\nconst healthData = $('Evaluate Health').first().json;\nconst now = healthData.checkedAt;\nconst severity = healthData.status === 'critical' ? 'CRITICAL' : 'WARNING';\n\nconst body = `## ${severity}: Webhook Sync Health Alert\\n\\n**Checked at:** ${now}\\n**Status:** ${healthData.status}\\n**Details:** ${healthData.details}\\n\\n| Check | Result |\\n|-------|--------|\\n| CU->GH Probe | ${healthData.cuProbeOk ? 'OK' : 'FAILED'} |\\n| GH->CU Probe | ${healthData.ghProbeOk ? 'OK' : 'FAILED'} |\\n| Recent Webhook Executions (4h) | ${healthData.recentExecCount} |\\n\\n**Action Required:** Check n8n at https://n8n.elect.info and Traefik ingress for issues.`;\n\nif (searchResult.total_count && searchResult.total_count > 0) {\n  return [{\n    json: {\n      action: 'comment',\n      issueNumber: searchResult.items[0].number,\n      commentBody: body\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    action: 'create',\n    title: `[sync-health] Webhook sync ${healthData.status}: ${healthData.details.substring(0, 80)}`,\n    body: body + '\\n\\n---\\n_This issue was created by the Webhook Health Monitor workflow. It will be auto-closed when health recovers._',\n    labels: ['sync-health-alert']\n  }\n}];\n"
       },
       "name": "Prepare Alert",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1080, 150],
-      "id": "whm-0001-0000-0000-000000000012"
+      "position": [1080, 150]
     },
     {
       "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.action }}",
         "rules": {
-          "values": [
+          "rules": [
             {
-              "conditions": {
-                "options": {
-                  "version": 2,
-                  "leftValue": "",
-                  "caseSensitive": true
-                },
-                "combinator": "and",
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "create",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  }
-                ]
-              }
+              "value2": "create"
             },
             {
-              "conditions": {
-                "options": {
-                  "version": 2,
-                  "leftValue": "",
-                  "caseSensitive": true
-                },
-                "combinator": "and",
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "comment",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  }
-                ]
-              }
+              "value2": "comment"
             }
           ]
-        },
-        "options": {}
+        }
       },
       "name": "Route Alert Action",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 2,
-      "position": [1320, 150],
-      "id": "whm-0001-0000-0000-000000000013"
+      "position": [1320, 150]
     },
     {
       "parameters": {
@@ -301,7 +225,6 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [1560, 80],
-      "id": "whm-0001-0000-0000-000000000014",
       "credentials": {
         "httpHeaderAuth": {
           "id": "SbQTxL2kanI77ymm",
@@ -324,7 +247,6 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [1560, 220],
-      "id": "whm-0001-0000-0000-000000000015",
       "credentials": {
         "httpHeaderAuth": {
           "id": "SbQTxL2kanI77ymm",
@@ -394,6 +316,13 @@
         [
           {
             "node": "Search Open Alert (Healthy)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Search Open Alert (Unhealthy)",
             "type": "main",
             "index": 0
           }
