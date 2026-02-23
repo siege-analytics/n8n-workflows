@@ -56,28 +56,13 @@
     },
     {
       "parameters": {
-        "url": "https://n8n.elect.info/api/v1/executions?limit=20&status=success",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "options": {
-          "response": {
-            "response": {
-              "neverError": true
-            }
-          }
-        }
+        "jsCode": "// Fetch recent executions from n8n API\n// Uses $getWorkflowStaticData to store the API key (set via rebuild or manual init)\n// Falls back gracefully if API is unreachable\ntry {\n  const response = await this.helpers.httpRequest({\n    method: 'GET',\n    url: 'https://n8n.elect.info/api/v1/executions?limit=20&status=success',\n    headers: {\n      'X-N8N-API-KEY': $env.N8N_API_KEY || ''\n    },\n    returnFullResponse: true,\n    ignoreHttpStatusErrors: true\n  });\n  return [{ json: response.body || response }];\n} catch (e) {\n  // API unreachable — return empty so health check can still evaluate probes\n  return [{ json: { data: [], error: e.message } }];\n}\n"
       },
       "name": "Fetch Recent Executions",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [120, 0],
-      "id": "whm-0001-0000-0000-000000000004",
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "REPLACE_N8N_API_CRED_ID",
-          "name": "n8n API"
-        }
-      }
+      "id": "whm-0001-0000-0000-000000000004"
     },
     {
       "parameters": {
