@@ -324,6 +324,65 @@ To add a new user to either sync system:
 | Assignee changed | Issue assignee updated |
 | Label changed | Label added/removed |
 
+## Health Monitoring & Reconciliation
+
+Three layers of defense prevent undetected sync outages:
+
+### Layer 1: Blackbox Probe (Kubernetes)
+
+A Prometheus blackbox exporter probe runs every 60s against the webhook endpoints. If ingress is down for >5 minutes, Grafana fires `N8nWebhookEndpointDown` and routes to the Zulip alerting channel.
+
+- **Probe**: `n8n-probe.yaml` in `electinfo/ops/util-observability/base/`
+- **Module**: `http_webhook` (accepts 200/404/405 — any HTTP response = ingress up)
+- **Targets**: `https://n8n.elect.info/webhook/clickup-to-github`, `https://n8n.elect.info/webhook/github-to-clickup`
+- **Alert**: `N8nWebhookEndpointDown` (critical, 5m), `N8nWebhookSlowResponse` (warning, >10s)
+
+### Layer 2: Webhook Health Monitor (n8n)
+
+**File**: `workflows/webhook-health-monitor.json`
+**Schedule**: Every 2 hours
+
+Probes both webhook endpoints from within n8n and checks the n8n execution API for recent webhook-triggered executions. If endpoints are unreachable or no executions have run in 4 hours, it creates/updates a GitHub issue in `electinfo/ops` with label `sync-health-alert`.
+
+**Node pipeline**:
+```
+Schedule Trigger (2h)
+  → Probe CU-GH Endpoint (GET)
+  → Probe GH-CU Endpoint (GET)
+  → Fetch Recent Executions (n8n API)
+  → Evaluate Health (Code: check probes + execution gap)
+  → Route by Health (Switch)
+    → Healthy: Search open alert → Prepare Resolution → Post comment → Close issue
+    → Unhealthy: Search open alert → Prepare Alert → Route Action → Create or Comment
+```
+
+**Credentials**: `GitHub API` (SbQTxL2kanI77ymm), `n8n API` (httpHeaderAuth with X-N8N-API-KEY)
+
+### Layer 3: Sync Reconciliation (n8n)
+
+**File**: `workflows/sync-reconciliation.json`
+**Schedule**: Every 6 hours
+
+Fetches all GitHub issues (search API) and all ClickUp tasks (list API per list), then compares open/closed state to detect drift. Auto-fixes `close_gh` drift (ClickUp closed but GitHub open). Posts a summary to a GitHub issue in `electinfo/ops` with label `sync-reconciliation`.
+
+**Node pipeline**:
+```
+Schedule Trigger (6h)
+  → Fetch GH Issues (search API, paginated)
+  → Build GH Lookup (Code: key by repoShort#number)
+  → Fetch CU Tasks (sequential: enterprise, siege_utilities, rundeck, ops)
+  → Find Drift (Code: compare state, build fix list)
+  → Route by Drift (Switch)
+    → Has Drift: Build Fixes → Apply Fixes (PATCH, 1/sec) → Build Summary → Post
+    → No Drift: Build Summary → Post
+```
+
+**Drift detection**:
+- ClickUp "shipped"/"cancelled" but GitHub "open" → auto-close GH issue
+- ClickUp open but GitHub "closed" → flag for manual review (no auto-reopen)
+
+**Credentials**: `GitHub API` (SbQTxL2kanI77ymm), `ClickUp API` (ju5QMIyIYhk1qUcc)
+
 ## Project Structure
 
 ```
@@ -333,14 +392,19 @@ To add a new user to either sync system:
 │   ├── github-to-clickup.json       # GitHub -> ClickUp (multi-repo)
 │   ├── clickup-to-github.json       # ClickUp -> GitHub (multi-repo)
 │   ├── github-to-gitlab.json        # GitHub -> GitLab (single repo pair)
-│   └── gitlab-to-github.json        # GitLab -> GitHub (single repo pair)
+│   ├── gitlab-to-github.json        # GitLab -> GitHub (single repo pair)
+│   ├── meet-standup-to-clickup.json # Google Meet standup → ClickUp docs
+│   ├── webhook-health-monitor.json  # Webhook health probing + alerting
+│   └── sync-reconciliation.json     # Cross-platform state drift detection
 ├── scripts/
 │   ├── bootstrap-issues.sh          # Bootstrap ClickUp sync
 │   ├── bootstrap-gitlab-issues.sh   # Bootstrap GitLab sync
-│   └── rebuild-mappings.sh          # Rebuild ClickUp static data
+│   ├── rebuild-mappings.sh          # Rebuild ClickUp static data
+│   └── backfill-standup-notes.py    # Backfill standup docs
 └── docs/
     ├── setup.md                     # ClickUp sync setup guide
     ├── gitlab-setup.md              # GitLab sync setup guide
     ├── adding-repos.md              # Adding repos to ClickUp sync
+    ├── meet-standup-setup.md        # Standup workflow setup
     └── architecture.md              # This file
 ```

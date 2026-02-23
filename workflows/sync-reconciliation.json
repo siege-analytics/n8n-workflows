@@ -1,0 +1,779 @@
+{
+  "name": "Sync Reconciliation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-800, 0],
+      "id": "rec-0001-0000-0000-000000000001"
+    },
+    {
+      "parameters": {
+        "url": "https://api.github.com/search/issues?q=is:issue+repo:electinfo/enterprise+repo:siege-analytics/siege_utilities+repo:electinfo/rundeck+repo:electinfo/ops+repo:electinfo/portainer&per_page=100",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Fetch GH Issues Page 1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-560, 0],
+      "id": "rec-0001-0000-0000-000000000002",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "SbQTxL2kanI77ymm",
+          "name": "GitHub API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check if there are more pages and fetch them\nconst firstPage = $('Fetch GH Issues Page 1').first().json;\nconst totalCount = firstPage.total_count || 0;\nconst firstPageItems = firstPage.items || [];\n\n// GitHub search API returns max 100 per page\n// If total_count > 100, we need more pages — but for now collect what we have\n// and note if we're missing items\nconst allIssues = firstPageItems;\n\n// Build a lookup: repo_short/number -> issue data\nconst ghLookup = {};\nfor (const issue of allIssues) {\n  // Extract repo short name from repository_url\n  const repoUrl = issue.repository_url || '';\n  const repoParts = repoUrl.split('/');\n  const repoOwner = repoParts[repoParts.length - 2];\n  const repoName = repoParts[repoParts.length - 1];\n\n  // Map to short names used in ClickUp task titles\n  let repoShort = repoName;\n  if (repoOwner === 'electinfo') {\n    repoShort = repoName; // enterprise, rundeck, ops, portainer\n  } else if (repoOwner === 'siege-analytics' && repoName === 'siege_utilities') {\n    repoShort = 'siege_utilities';\n  }\n\n  ghLookup[`${repoShort}#${issue.number}`] = {\n    number: issue.number,\n    state: issue.state,\n    title: issue.title,\n    repoShort: repoShort,\n    repoFull: `${repoOwner}/${repoName}`,\n    assignees: (issue.assignees || []).map(a => a.login),\n    labels: (issue.labels || []).map(l => l.name),\n    url: issue.html_url\n  };\n}\n\nreturn [{\n  json: {\n    ghLookup: ghLookup,\n    ghTotalCount: totalCount,\n    ghFetchedCount: allIssues.length,\n    truncated: totalCount > allIssues.length\n  }\n}];\n"
+      },
+      "name": "Build GH Lookup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-320, 0],
+      "id": "rec-0001-0000-0000-000000000003"
+    },
+    {
+      "parameters": {
+        "url": "https://api.clickup.com/api/v2/list/901710789803/task?page=0&include_closed=true&subtasks=true",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Fetch CU Tasks - enterprise",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-80, 0],
+      "id": "rec-0001-0000-0000-000000000004",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ju5QMIyIYhk1qUcc",
+          "name": "ClickUp API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.clickup.com/api/v2/list/901710789806/task?page=0&include_closed=true&subtasks=true",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Fetch CU Tasks - siege_utilities",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [160, 0],
+      "id": "rec-0001-0000-0000-000000000005",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ju5QMIyIYhk1qUcc",
+          "name": "ClickUp API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.clickup.com/api/v2/list/901710789808/task?page=0&include_closed=true&subtasks=true",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Fetch CU Tasks - rundeck",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [400, 0],
+      "id": "rec-0001-0000-0000-000000000006",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ju5QMIyIYhk1qUcc",
+          "name": "ClickUp API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.clickup.com/api/v2/list/901710789809/task?page=0&include_closed=true&subtasks=true",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Fetch CU Tasks - ops",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [640, 0],
+      "id": "rec-0001-0000-0000-000000000007",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ju5QMIyIYhk1qUcc",
+          "name": "ClickUp API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Collect all ClickUp tasks from all lists and compare with GitHub issues\nconst ghData = $('Build GH Lookup').first().json;\nconst ghLookup = ghData.ghLookup;\n\n// Collect all CU tasks from all fetched lists\nconst allCuTasks = [];\nconst listNodes = [\n  'Fetch CU Tasks - enterprise',\n  'Fetch CU Tasks - siege_utilities',\n  'Fetch CU Tasks - rundeck',\n  'Fetch CU Tasks - ops'\n];\n\nfor (const nodeName of listNodes) {\n  try {\n    const resp = $(nodeName).first().json;\n    const tasks = resp.tasks || [];\n    allCuTasks.push(...tasks);\n  } catch (e) {\n    // Node may not have executed or returned error\n  }\n}\n\n// ClickUp status -> GitHub state mapping\n// Closed statuses in ClickUp\nconst cuClosedStatuses = ['shipped', 'cancelled', 'done', 'closed', 'complete'];\nconst cuOpenStatuses = ['backlog', 'to do', 'in progress', 'in review', 'todo', 'open'];\n\n// User mapping for assignee comparison\nconst cuToGh = {\n  95317754: 'dheerajchand',\n  192189161: 'steveblackmon'\n};\n\nconst drifts = [];\nlet totalCompared = 0;\n\nfor (const task of allCuTasks) {\n  // Extract repo#number from task name: e.g. \"[enterprise#42] Some title\"\n  const match = task.name.match(/^\\[([\\w_]+)#(\\d+)\\]/);\n  if (!match) continue; // Skip tasks without the standard naming\n\n  const repoShort = match[1];\n  const issueNumber = parseInt(match[2]);\n  const key = `${repoShort}#${issueNumber}`;\n  const ghIssue = ghLookup[key];\n\n  if (!ghIssue) {\n    // GH issue not found in our search results — could be pagination truncation\n    continue;\n  }\n\n  totalCompared++;\n\n  // Compare open/closed state\n  const cuStatus = (task.status && task.status.status) ? task.status.status.toLowerCase() : 'unknown';\n  const cuIsClosed = cuClosedStatuses.includes(cuStatus);\n  const ghIsClosed = ghIssue.state === 'closed';\n\n  if (cuIsClosed && !ghIsClosed) {\n    drifts.push({\n      type: 'state',\n      direction: 'cu_closed_gh_open',\n      key: key,\n      cuStatus: cuStatus,\n      ghState: ghIssue.state,\n      ghRepo: ghIssue.repoFull,\n      ghNumber: ghIssue.number,\n      cuTaskId: task.id,\n      fix: 'close_gh',\n      description: `${key}: ClickUp=${cuStatus} but GitHub=open`\n    });\n  } else if (!cuIsClosed && ghIsClosed) {\n    drifts.push({\n      type: 'state',\n      direction: 'cu_open_gh_closed',\n      key: key,\n      cuStatus: cuStatus,\n      ghState: ghIssue.state,\n      ghRepo: ghIssue.repoFull,\n      ghNumber: ghIssue.number,\n      cuTaskId: task.id,\n      fix: 'flag_review',\n      description: `${key}: ClickUp=${cuStatus} but GitHub=closed (needs review)`\n    });\n  }\n}\n\nconst now = new Date().toISOString();\n\nif (drifts.length === 0) {\n  return [{\n    json: {\n      hasDrift: false,\n      totalCompared: totalCompared,\n      totalCuTasks: allCuTasks.length,\n      ghTotalCount: ghData.ghTotalCount,\n      driftCount: 0,\n      drifts: [],\n      summary: `Reconciliation at ${now}: ${totalCompared} tasks compared, 0 drift found.`,\n      checkedAt: now\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    hasDrift: true,\n    totalCompared: totalCompared,\n    totalCuTasks: allCuTasks.length,\n    ghTotalCount: ghData.ghTotalCount,\n    driftCount: drifts.length,\n    drifts: drifts,\n    summary: `Reconciliation at ${now}: ${totalCompared} tasks compared, ${drifts.length} drift(s) found.`,\n    checkedAt: now\n  }\n}];\n"
+      },
+      "name": "Find Drift",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 0],
+      "id": "rec-0001-0000-0000-000000000008"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.hasDrift }}",
+                    "rightValue": "true",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.hasDrift }}",
+                    "rightValue": "false",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Route by Drift",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [1120, 0],
+      "id": "rec-0001-0000-0000-000000000009"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build fix requests for state drift\nconst driftData = $('Find Drift').first().json;\nconst drifts = driftData.drifts;\nconst fixes = [];\n\nfor (const drift of drifts) {\n  if (drift.fix === 'close_gh') {\n    // ClickUp is closed but GitHub is open — close the GH issue\n    fixes.push({\n      json: {\n        fixType: 'close_gh',\n        url: `https://api.github.com/repos/${drift.ghRepo}/issues/${drift.ghNumber}`,\n        body: { state: 'closed', state_reason: 'completed' },\n        description: drift.description\n      }\n    });\n  }\n  // 'flag_review' drifts are included in the summary but not auto-fixed\n}\n\nif (fixes.length === 0) {\n  return [];\n}\n\nreturn fixes;\n"
+      },
+      "name": "Build Fix Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, -100],
+      "id": "rec-0001-0000-0000-000000000010"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $json.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1000
+            }
+          },
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Apply Fixes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1600, -100],
+      "id": "rec-0001-0000-0000-000000000011",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "SbQTxL2kanI77ymm",
+          "name": "GitHub API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the reconciliation summary to post\nconst driftData = $('Find Drift').first().json;\nconst now = driftData.checkedAt;\n\nlet summaryBody = `## Sync Reconciliation Report\\n\\n`;\nsummaryBody += `**Run at:** ${now}\\n`;\nsummaryBody += `**Tasks compared:** ${driftData.totalCompared} (${driftData.totalCuTasks} CU tasks, ${driftData.ghTotalCount} GH issues)\\n`;\nsummaryBody += `**Drift found:** ${driftData.driftCount}\\n\\n`;\n\nif (driftData.driftCount === 0) {\n  summaryBody += 'No drift detected. All synced tasks match their GitHub issue state.\\n';\n} else {\n  summaryBody += '| Issue | Drift | Action |\\n';\n  summaryBody += '|-------|-------|--------|\\n';\n  for (const drift of driftData.drifts) {\n    const action = drift.fix === 'close_gh' ? 'Auto-closed GH issue' : 'Flagged for review';\n    summaryBody += `| ${drift.key} | ${drift.description} | ${action} |\\n`;\n  }\n}\n\nsummaryBody += '\\n---\\n_Generated by Sync Reconciliation workflow_';\n\nreturn [{\n  json: {\n    commentBody: summaryBody\n  }\n}];\n"
+      },
+      "name": "Build Summary (Has Drift)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1840, -100],
+      "id": "rec-0001-0000-0000-000000000012"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the reconciliation summary for no-drift case\nconst driftData = $('Find Drift').first().json;\n\nreturn [{\n  json: {\n    commentBody: `## Sync Reconciliation Report\\n\\n**Run at:** ${driftData.checkedAt}\\n**Tasks compared:** ${driftData.totalCompared} (${driftData.totalCuTasks} CU tasks, ${driftData.ghTotalCount} GH issues)\\n**Drift found:** 0\\n\\nNo drift detected. All synced tasks match their GitHub issue state.\\n\\n---\\n_Generated by Sync Reconciliation workflow_`\n  }\n}];\n"
+      },
+      "name": "Build Summary (No Drift)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 100],
+      "id": "rec-0001-0000-0000-000000000013"
+    },
+    {
+      "parameters": {
+        "url": "https://api.github.com/search/issues?q=repo:electinfo/ops+label:sync-reconciliation+is:open",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "Search Reconciliation Issue (Drift)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2080, -100],
+      "id": "rec-0001-0000-0000-000000000014",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "SbQTxL2kanI77ymm",
+          "name": "GitHub API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.github.com/search/issues?q=repo:electinfo/ops+label:sync-reconciliation+is:open",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "Search Reconciliation Issue (Clean)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1600, 100],
+      "id": "rec-0001-0000-0000-000000000015",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "SbQTxL2kanI77ymm",
+          "name": "GitHub API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Post summary on existing reconciliation tracking issue, or create one\nconst searchResult = $('Search Reconciliation Issue (Drift)').first().json;\nconst summaryData = $('Build Summary (Has Drift)').first().json;\n\nif (searchResult.total_count && searchResult.total_count > 0) {\n  return [{\n    json: {\n      action: 'comment',\n      issueNumber: searchResult.items[0].number,\n      commentBody: summaryData.commentBody\n    }\n  }];\n}\n\n// Create tracking issue\nreturn [{\n  json: {\n    action: 'create',\n    title: '[sync-reconciliation] Drift detection and auto-fix tracking',\n    body: summaryData.commentBody,\n    labels: ['sync-reconciliation']\n  }\n}];\n"
+      },
+      "name": "Prepare Post (Drift)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2320, -100],
+      "id": "rec-0001-0000-0000-000000000016"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Post clean summary on existing reconciliation issue, or create one\nconst searchResult = $('Search Reconciliation Issue (Clean)').first().json;\nconst summaryData = $('Build Summary (No Drift)').first().json;\n\nif (searchResult.total_count && searchResult.total_count > 0) {\n  return [{\n    json: {\n      action: 'comment',\n      issueNumber: searchResult.items[0].number,\n      commentBody: summaryData.commentBody\n    }\n  }];\n}\n\n// Create tracking issue\nreturn [{\n  json: {\n    action: 'create',\n    title: '[sync-reconciliation] Drift detection and auto-fix tracking',\n    body: summaryData.commentBody,\n    labels: ['sync-reconciliation']\n  }\n}];\n"
+      },
+      "name": "Prepare Post (Clean)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1840, 100],
+      "id": "rec-0001-0000-0000-000000000017"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "create",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "comment",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Route Post (Drift)",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [2560, -100],
+      "id": "rec-0001-0000-0000-000000000018"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "create",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "comment",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Route Post (Clean)",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [2080, 100],
+      "id": "rec-0001-0000-0000-000000000019"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.github.com/repos/electinfo/ops/issues",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ title: $json.title, body: $json.body, labels: $json.labels }) }}",
+        "options": {}
+      },
+      "name": "Create Tracking Issue (Drift)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2800, -170],
+      "id": "rec-0001-0000-0000-000000000020",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "SbQTxL2kanI77ymm",
+          "name": "GitHub API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.github.com/repos/electinfo/ops/issues/{{ $json.issueNumber }}/comments",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ body: $json.commentBody }) }}",
+        "options": {}
+      },
+      "name": "Comment on Tracking Issue (Drift)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2800, -30],
+      "id": "rec-0001-0000-0000-000000000021",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "SbQTxL2kanI77ymm",
+          "name": "GitHub API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.github.com/repos/electinfo/ops/issues",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ title: $json.title, body: $json.body, labels: $json.labels }) }}",
+        "options": {}
+      },
+      "name": "Create Tracking Issue (Clean)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2320, 30],
+      "id": "rec-0001-0000-0000-000000000022",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "SbQTxL2kanI77ymm",
+          "name": "GitHub API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.github.com/repos/electinfo/ops/issues/{{ $json.issueNumber }}/comments",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ body: $json.commentBody }) }}",
+        "options": {}
+      },
+      "name": "Comment on Tracking Issue (Clean)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2320, 170],
+      "id": "rec-0001-0000-0000-000000000023",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "SbQTxL2kanI77ymm",
+          "name": "GitHub API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch GH Issues Page 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch GH Issues Page 1": {
+      "main": [
+        [
+          {
+            "node": "Build GH Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build GH Lookup": {
+      "main": [
+        [
+          {
+            "node": "Fetch CU Tasks - enterprise",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch CU Tasks - enterprise": {
+      "main": [
+        [
+          {
+            "node": "Fetch CU Tasks - siege_utilities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch CU Tasks - siege_utilities": {
+      "main": [
+        [
+          {
+            "node": "Fetch CU Tasks - rundeck",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch CU Tasks - rundeck": {
+      "main": [
+        [
+          {
+            "node": "Fetch CU Tasks - ops",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch CU Tasks - ops": {
+      "main": [
+        [
+          {
+            "node": "Find Drift",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Drift": {
+      "main": [
+        [
+          {
+            "node": "Route by Drift",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Drift": {
+      "main": [
+        [
+          {
+            "node": "Build Fix Requests",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Summary (No Drift)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Fix Requests": {
+      "main": [
+        [
+          {
+            "node": "Apply Fixes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Fixes": {
+      "main": [
+        [
+          {
+            "node": "Build Summary (Has Drift)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Summary (Has Drift)": {
+      "main": [
+        [
+          {
+            "node": "Search Reconciliation Issue (Drift)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Reconciliation Issue (Drift)": {
+      "main": [
+        [
+          {
+            "node": "Prepare Post (Drift)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Post (Drift)": {
+      "main": [
+        [
+          {
+            "node": "Route Post (Drift)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Post (Drift)": {
+      "main": [
+        [
+          {
+            "node": "Create Tracking Issue (Drift)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Comment on Tracking Issue (Drift)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Summary (No Drift)": {
+      "main": [
+        [
+          {
+            "node": "Search Reconciliation Issue (Clean)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Reconciliation Issue (Clean)": {
+      "main": [
+        [
+          {
+            "node": "Prepare Post (Clean)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Post (Clean)": {
+      "main": [
+        [
+          {
+            "node": "Route Post (Clean)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Post (Clean)": {
+      "main": [
+        [
+          {
+            "node": "Create Tracking Issue (Clean)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Comment on Tracking Issue (Clean)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

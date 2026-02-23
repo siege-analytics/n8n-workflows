@@ -1,0 +1,502 @@
+{
+  "name": "Webhook Health Monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 2
+            }
+          ]
+        }
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-600, 0],
+      "id": "whm-0001-0000-0000-000000000001"
+    },
+    {
+      "parameters": {
+        "url": "https://n8n.elect.info/webhook/clickup-to-github",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "name": "Probe CU-GH Endpoint",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-360, 0],
+      "id": "whm-0001-0000-0000-000000000002"
+    },
+    {
+      "parameters": {
+        "url": "https://n8n.elect.info/webhook/github-to-clickup",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "name": "Probe GH-CU Endpoint",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-120, 0],
+      "id": "whm-0001-0000-0000-000000000003"
+    },
+    {
+      "parameters": {
+        "url": "https://n8n.elect.info/api/v1/executions?limit=20&status=success",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Fetch Recent Executions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [120, 0],
+      "id": "whm-0001-0000-0000-000000000004",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_N8N_API_CRED_ID",
+          "name": "n8n API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Collect probe results — any HTTP response means ingress is up\n// A connection timeout/refused means it's truly down\nconst cuProbe = $('Probe CU-GH Endpoint').first();\nconst ghProbe = $('Probe GH-CU Endpoint').first();\nconst execResponse = $('Fetch Recent Executions').first().json;\n\n// Probe success: we got an HTTP response (even 404/405 = ingress works)\nconst cuProbeOk = cuProbe && cuProbe.json && !cuProbe.json.error;\nconst ghProbeOk = ghProbe && ghProbe.json && !ghProbe.json.error;\n\n// Check for execution gap: any webhook workflow executions in the last 4 hours?\nconst fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();\nconst allExecs = execResponse.data || [];\n// Filter to webhook-triggered workflow executions (not scheduled ones)\nconst recentWebhookExecs = allExecs.filter(e => {\n  const isRecent = e.startedAt > fourHoursAgo;\n  const isWebhook = e.mode === 'webhook';\n  return isRecent && isWebhook;\n});\nconst hasRecentExecs = recentWebhookExecs.length > 0;\n\n// Determine health status\nlet status = 'healthy';\nconst details = [];\n\nif (!cuProbeOk) {\n  status = 'critical';\n  details.push('CU->GH webhook endpoint unreachable');\n}\nif (!ghProbeOk) {\n  status = 'critical';\n  details.push('GH->CU webhook endpoint unreachable');\n}\nif (!hasRecentExecs && status !== 'critical') {\n  status = 'warning';\n  details.push('No webhook-triggered executions in last 4 hours');\n}\n\nif (details.length === 0) {\n  details.push('All probes passed, recent executions found');\n}\n\nreturn [{\n  json: {\n    status: status,\n    details: details.join('; '),\n    cuProbeOk: cuProbeOk,\n    ghProbeOk: ghProbeOk,\n    hasRecentExecs: hasRecentExecs,\n    recentExecCount: recentWebhookExecs.length,\n    checkedAt: new Date().toISOString()\n  }\n}];\n"
+      },
+      "name": "Evaluate Health",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [360, 0],
+      "id": "whm-0001-0000-0000-000000000005"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "healthy",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "healthy",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEquals"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Route by Health",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [600, 0],
+      "id": "whm-0001-0000-0000-000000000006"
+    },
+    {
+      "parameters": {
+        "url": "https://api.github.com/search/issues?q=repo:electinfo/ops+label:sync-health-alert+is:open",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "Search Open Alert (Healthy)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [840, -150],
+      "id": "whm-0001-0000-0000-000000000007",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "SbQTxL2kanI77ymm",
+          "name": "GitHub API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Health recovered — post resolution comment + close if there's an open alert\nconst searchResult = $('Search Open Alert (Healthy)').first().json;\nconst healthData = $('Evaluate Health').first().json;\n\nif (!searchResult.total_count || searchResult.total_count === 0) {\n  // No open alert issue — nothing to do\n  return [];\n}\n\nconst issueNumber = searchResult.items[0].number;\nconst now = healthData.checkedAt;\n\nreturn [{\n  json: {\n    issueNumber: issueNumber,\n    commentBody: `## Resolved\\n\\nWebhook health monitor reports all clear at ${now}.\\n\\n- CU->GH probe: OK\\n- GH->CU probe: OK\\n- Recent webhook executions: ${healthData.recentExecCount}\\n\\nAuto-closing this alert.`\n  }\n}];\n"
+      },
+      "name": "Prepare Resolution",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1080, -150],
+      "id": "whm-0001-0000-0000-000000000008"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.github.com/repos/electinfo/ops/issues/{{ $json.issueNumber }}/comments",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ body: $json.commentBody }) }}",
+        "options": {}
+      },
+      "name": "Post Resolution Comment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, -150],
+      "id": "whm-0001-0000-0000-000000000009",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "SbQTxL2kanI77ymm",
+          "name": "GitHub API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.github.com/repos/electinfo/ops/issues/{{ $('Prepare Resolution').first().json.issueNumber }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ state: 'closed', state_reason: 'completed' }) }}",
+        "options": {}
+      },
+      "name": "Close Alert Issue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, -150],
+      "id": "whm-0001-0000-0000-000000000010",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "SbQTxL2kanI77ymm",
+          "name": "GitHub API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.github.com/search/issues?q=repo:electinfo/ops+label:sync-health-alert+is:open",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "Search Open Alert (Unhealthy)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [840, 150],
+      "id": "whm-0001-0000-0000-000000000011",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "SbQTxL2kanI77ymm",
+          "name": "GitHub API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Unhealthy — decide whether to create new issue or comment on existing\nconst searchResult = $('Search Open Alert (Unhealthy)').first().json;\nconst healthData = $('Evaluate Health').first().json;\nconst now = healthData.checkedAt;\nconst severity = healthData.status === 'critical' ? 'CRITICAL' : 'WARNING';\n\nconst body = `## ${severity}: Webhook Sync Health Alert\\n\\n**Checked at:** ${now}\\n**Status:** ${healthData.status}\\n**Details:** ${healthData.details}\\n\\n| Check | Result |\\n|-------|--------|\\n| CU->GH Probe | ${healthData.cuProbeOk ? 'OK' : 'FAILED'} |\\n| GH->CU Probe | ${healthData.ghProbeOk ? 'OK' : 'FAILED'} |\\n| Recent Webhook Executions (4h) | ${healthData.recentExecCount} |\\n\\n**Action Required:** Check n8n at https://n8n.elect.info and Traefik ingress for issues.`;\n\nif (searchResult.total_count && searchResult.total_count > 0) {\n  // Existing open alert — add comment\n  return [{\n    json: {\n      action: 'comment',\n      issueNumber: searchResult.items[0].number,\n      commentBody: body\n    }\n  }];\n}\n\n// No existing alert — create new issue\nreturn [{\n  json: {\n    action: 'create',\n    title: `[sync-health] Webhook sync ${healthData.status}: ${healthData.details.substring(0, 80)}`,\n    body: body + '\\n\\n---\\n_This issue was created by the Webhook Health Monitor workflow. It will be auto-closed when health recovers._',\n    labels: ['sync-health-alert']\n  }\n}];\n"
+      },
+      "name": "Prepare Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1080, 150],
+      "id": "whm-0001-0000-0000-000000000012"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "create",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "comment",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Route Alert Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [1320, 150],
+      "id": "whm-0001-0000-0000-000000000013"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.github.com/repos/electinfo/ops/issues",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ title: $json.title, body: $json.body, labels: $json.labels }) }}",
+        "options": {}
+      },
+      "name": "Create Alert Issue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 80],
+      "id": "whm-0001-0000-0000-000000000014",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "SbQTxL2kanI77ymm",
+          "name": "GitHub API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.github.com/repos/electinfo/ops/issues/{{ $json.issueNumber }}/comments",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ body: $json.commentBody }) }}",
+        "options": {}
+      },
+      "name": "Comment on Alert Issue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 220],
+      "id": "whm-0001-0000-0000-000000000015",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "SbQTxL2kanI77ymm",
+          "name": "GitHub API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Probe CU-GH Endpoint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probe CU-GH Endpoint": {
+      "main": [
+        [
+          {
+            "node": "Probe GH-CU Endpoint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probe GH-CU Endpoint": {
+      "main": [
+        [
+          {
+            "node": "Fetch Recent Executions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Recent Executions": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Health": {
+      "main": [
+        [
+          {
+            "node": "Route by Health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Health": {
+      "main": [
+        [
+          {
+            "node": "Search Open Alert (Healthy)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Search Open Alert (Unhealthy)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Open Alert (Healthy)": {
+      "main": [
+        [
+          {
+            "node": "Prepare Resolution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Resolution": {
+      "main": [
+        [
+          {
+            "node": "Post Resolution Comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Resolution Comment": {
+      "main": [
+        [
+          {
+            "node": "Close Alert Issue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Open Alert (Unhealthy)": {
+      "main": [
+        [
+          {
+            "node": "Prepare Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Alert": {
+      "main": [
+        [
+          {
+            "node": "Route Alert Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Alert Action": {
+      "main": [
+        [
+          {
+            "node": "Create Alert Issue",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Comment on Alert Issue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
