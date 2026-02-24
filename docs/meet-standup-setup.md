@@ -17,7 +17,14 @@ Schedule Trigger (every hour)
   → Export Doc as Text (HTTP Request → Google Drive export API, batched)
   → Format for ClickUp (Code — builds markdown doc payload)
   → Create ClickUp Doc (HTTP Request → ClickUp API v3, batched)
+  → Build Page Payload (Code — extracts doc ID from create response)
+  → Create Page Content (HTTP Request → ClickUp Pages API, batched)
 ```
+
+**Important**: ClickUp Docs API v3 uses a two-stage creation process.
+`POST /docs` creates an empty shell (ignoring the `content` field).
+Content must be added via a separate `POST /docs/{id}/pages` call.
+The API may wrap create responses in a `data` key (`response.data.id`).
 
 ## How It Works
 
@@ -32,7 +39,10 @@ Schedule Trigger (every hour)
    - If all docs are already synced, returns empty → downstream nodes skip gracefully
 5. **Export Doc as Text** fetches the plain text content of each missing doc (1 req/sec)
 6. **Format for ClickUp** builds the markdown payload with header, source, date, and body
-7. **Create ClickUp Doc** creates each doc in ClickUp (1 req/sec)
+7. **Create ClickUp Doc** creates each empty doc shell in ClickUp (1 req/sec)
+8. **Build Page Payload** extracts the doc ID from the create response (`data.id` or `id`)
+   and pairs it with the formatted content
+9. **Create Page Content** populates each doc with its content via the Pages API (1 req/sec)
 
 ### Key Properties
 
@@ -134,6 +144,18 @@ Extracted from the ClickUp URL `https://app.clickup.com/9017833757/v/f/901768579
 3. Check "Find Missing Docs" output — are there items in the missing list?
 4. Verify the name pattern matches: the expected ClickUp name is
    `Daily Standup — YYYY-MM-DD` (em dash, not hyphen)
+
+### Docs created but empty
+
+ClickUp Docs API v3 ignores the `content` field on create — content must be added
+via a separate `POST /docs/{id}/pages` call. If docs are created but empty:
+
+1. Check "Build Page Payload" output — does `docId` have a value?
+2. The create response may wrap the doc in a `data` key — the code tries `data.id`
+   first, then `id`. Check the n8n execution log for the actual response shape.
+3. Check "Create Page Content" output for HTTP errors (4xx/5xx).
+4. Both HTTP nodes have `onError: continueRegularOutput` so failures don't stop
+   the batch — look for error fields in the output items.
 
 ### `parent` field rejected by ClickUp API
 

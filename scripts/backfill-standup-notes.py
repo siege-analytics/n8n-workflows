@@ -205,7 +205,12 @@ def create_clickup_doc(
     description: str,
     content: str,
 ) -> dict:
-    """Create a ClickUp Doc via API v3."""
+    """Create a ClickUp Doc via API v3.
+
+    Note: The create endpoint ignores the ``content`` field — content must be
+    added separately via ``create_page_content()``.  We still send ``content``
+    in case ClickUp changes this behaviour in the future.
+    """
     url = CLICKUP_DOCS_URL.format(workspace=workspace_id)
     payload = {
         "name": name,
@@ -215,6 +220,51 @@ def create_clickup_doc(
             "id": parent_id,
             "type": parent_type,
         },
+    }
+    resp = requests.post(
+        url,
+        headers={
+            "Authorization": token,
+            "Content-Type": "application/json",
+        },
+        json=payload,
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def extract_doc_id(result: dict) -> str | None:
+    """Extract doc ID from a ClickUp create-doc response.
+
+    The API v3 may wrap the doc object in a ``data`` key.
+    """
+    if "data" in result and isinstance(result["data"], dict):
+        return result["data"].get("id")
+    return result.get("id")
+
+
+def create_page_content(
+    token: str,
+    workspace_id: str,
+    doc_id: str,
+    name: str,
+    content: str,
+) -> dict:
+    """Add page content to an existing ClickUp Doc via the Pages API.
+
+    ClickUp Docs API v3 uses a two-stage creation process:
+    1. POST /docs creates an empty shell
+    2. POST /docs/{id}/pages populates the content
+    """
+    url = (
+        f"https://api.clickup.com/api/v3/workspaces/{workspace_id}"
+        f"/docs/{doc_id}/pages"
+    )
+    payload = {
+        "name": name,
+        "content": content,
+        "content_format": "text/md",
     }
     resp = requests.post(
         url,
@@ -242,7 +292,7 @@ def format_doc(file_name: str, created_time: str, text_content: str) -> tuple[st
     iso_date = dt.strftime("%Y-%m-%d")
     display_date = dt.strftime("%A, %B %-d, %Y")
 
-    doc_name = f"Daily Standup and Checkin \u2014 {iso_date}"
+    doc_name = f"Daily Standup \u2014 {iso_date}"
     description = f"Standup notes from Google Meet ({iso_date})"
     content = "\n".join([
         f"# {doc_name}",
@@ -365,7 +415,7 @@ def main() -> None:
                 doc["name"], doc["createdTime"], text
             )
 
-            # Create in ClickUp
+            # Stage 1: Create empty doc shell in ClickUp
             result = create_clickup_doc(
                 clickup_token,
                 args.workspace_id,
@@ -376,8 +426,26 @@ def main() -> None:
                 content,
             )
 
-            doc_id = result.get("id", "unknown")
+            doc_id = extract_doc_id(result)
+            if not doc_id:
+                print(
+                    f"  ERROR: No doc ID in response: {json.dumps(result)[:300]}",
+                    file=sys.stderr,
+                )
+                errors += 1
+                continue
+
             print(f"  Created ClickUp Doc: {doc_name} (id: {doc_id})")
+
+            # Stage 2: Populate content via Pages API
+            create_page_content(
+                clickup_token,
+                args.workspace_id,
+                doc_id,
+                doc_name,
+                content,
+            )
+            print(f"  Added page content to doc {doc_id}")
 
             # Record success
             processed.add(doc["id"])

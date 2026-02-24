@@ -186,11 +186,12 @@
           "id": "ju5QMIyIYhk1qUcc",
           "name": "ClickUp API"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "const items = $input.all();\nconst fmtItems = $('Format for ClickUp').all();\n\nconst results = [];\nfor (let i = 0; i < items.length; i++) {\n  const docId = items[i].json.id;\n  const content = fmtItems[i].json.payload.content;\n  const docName = fmtItems[i].json.payload.name;\n\n  results.push({\n    json: {\n      docId: docId,\n      pagePayload: {\n        name: docName,\n        content: content,\n        content_format: 'text/md'\n      }\n    }\n  });\n}\n\nreturn results;\n"
+        "jsCode": "const items = $input.all();\nconst fmtItems = $('Format for ClickUp').all();\n\nconst results = [];\nfor (let i = 0; i < items.length; i++) {\n  const resp = items[i].json;\n\n  // ClickUp API v3 wraps create responses in a 'data' key.\n  // Try data.id first, then fall back to top-level id.\n  const docId = (resp.data && resp.data.id) || resp.id || (resp.doc && resp.doc.id);\n\n  if (!docId) {\n    // Log the response shape so we can diagnose in n8n execution log\n    console.error(\n      '[Build Page Payload] No doc ID in response for item ' + i +\n      ': keys=' + Object.keys(resp).join(',') +\n      ' snippet=' + JSON.stringify(resp).substring(0, 300)\n    );\n    continue; // Skip — doc creation likely failed\n  }\n\n  const content = fmtItems[i].json.payload.content;\n  const docName = fmtItems[i].json.payload.name;\n\n  results.push({\n    json: {\n      docId: docId,\n      pagePayload: {\n        name: docName,\n        content: content,\n        content_format: 'text/md'\n      }\n    }\n  });\n}\n\nreturn results;\n"
       },
       "name": "Build Page Payload",
       "type": "n8n-nodes-base.code",
@@ -232,7 +233,8 @@
           "id": "ju5QMIyIYhk1qUcc",
           "name": "ClickUp API"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
