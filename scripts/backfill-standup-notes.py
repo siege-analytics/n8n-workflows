@@ -208,8 +208,8 @@ def create_clickup_doc(
     """Create a ClickUp Doc via API v3.
 
     Note: The create endpoint ignores the ``content`` field — content must be
-    added separately via ``create_page_content()``.  We still send ``content``
-    in case ClickUp changes this behaviour in the future.
+    added separately via ``get_doc_pages()`` + ``edit_default_page()``.  We
+    still send ``content`` in case ClickUp changes this behaviour in the future.
     """
     url = CLICKUP_DOCS_URL.format(workspace=workspace_id)
     payload = {
@@ -244,29 +244,56 @@ def extract_doc_id(result: dict) -> str | None:
     return result.get("id")
 
 
-def create_page_content(
+def get_doc_pages(
     token: str,
     workspace_id: str,
     doc_id: str,
-    name: str,
-    content: str,
-) -> dict:
-    """Add page content to an existing ClickUp Doc via the Pages API.
+) -> list[dict]:
+    """Get page listing for a ClickUp Doc.
 
-    ClickUp Docs API v3 uses a two-stage creation process:
-    1. POST /docs creates an empty shell
-    2. POST /docs/{id}/pages populates the content
+    Returns the list of pages. The first element is the auto-created default page.
     """
     url = (
         f"https://api.clickup.com/api/v3/workspaces/{workspace_id}"
-        f"/docs/{doc_id}/pages"
+        f"/docs/{doc_id}/page_listing"
+    )
+    resp = requests.get(
+        url,
+        headers={
+            "Authorization": token,
+            "Content-Type": "application/json",
+        },
+        timeout=30,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return data.get("pages", data if isinstance(data, list) else [])
+
+
+def edit_default_page(
+    token: str,
+    workspace_id: str,
+    doc_id: str,
+    page_id: str,
+    name: str,
+    content: str,
+) -> dict:
+    """Edit the default page of a ClickUp Doc via PUT.
+
+    ClickUp auto-creates a blank default page when a doc is created.
+    This edits that page in-place instead of creating a second page.
+    """
+    url = (
+        f"https://api.clickup.com/api/v3/workspaces/{workspace_id}"
+        f"/docs/{doc_id}/pages/{page_id}"
     )
     payload = {
         "name": name,
         "content": content,
         "content_format": "text/md",
+        "content_edit_mode": "replace",
     }
-    resp = requests.post(
+    resp = requests.put(
         url,
         headers={
             "Authorization": token,
@@ -437,15 +464,34 @@ def main() -> None:
 
             print(f"  Created ClickUp Doc: {doc_name} (id: {doc_id})")
 
-            # Stage 2: Populate content via Pages API
-            create_page_content(
+            # Stage 2: Get the auto-created default page
+            time.sleep(RATE_LIMIT_DELAY)
+            pages = get_doc_pages(
                 clickup_token,
                 args.workspace_id,
                 doc_id,
+            )
+            if not pages:
+                print(
+                    f"  ERROR: No pages found for doc {doc_id}",
+                    file=sys.stderr,
+                )
+                errors += 1
+                continue
+
+            default_page_id = pages[0]["id"]
+
+            # Stage 3: Edit the default page with content (PUT, not POST)
+            time.sleep(RATE_LIMIT_DELAY)
+            edit_default_page(
+                clickup_token,
+                args.workspace_id,
+                doc_id,
+                default_page_id,
                 doc_name,
                 content,
             )
-            print(f"  Added page content to doc {doc_id}")
+            print(f"  Edited default page {default_page_id} in doc {doc_id}")
 
             # Record success
             processed.add(doc["id"])

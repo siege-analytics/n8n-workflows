@@ -191,21 +191,51 @@
     },
     {
       "parameters": {
-        "jsCode": "const items = $input.all();\nconst fmtItems = $('Format for ClickUp').all();\n\nconst results = [];\nfor (let i = 0; i < items.length; i++) {\n  const resp = items[i].json;\n\n  // ClickUp API v3 wraps create responses in a 'data' key.\n  // Try data.id first, then fall back to top-level id.\n  const docId = (resp.data && resp.data.id) || resp.id || (resp.doc && resp.doc.id);\n\n  if (!docId) {\n    // Log the response shape so we can diagnose in n8n execution log\n    console.error(\n      '[Build Page Payload] No doc ID in response for item ' + i +\n      ': keys=' + Object.keys(resp).join(',') +\n      ' snippet=' + JSON.stringify(resp).substring(0, 300)\n    );\n    continue; // Skip — doc creation likely failed\n  }\n\n  const content = fmtItems[i].json.payload.content;\n  const docName = fmtItems[i].json.payload.name;\n\n  results.push({\n    json: {\n      docId: docId,\n      pagePayload: {\n        name: docName,\n        content: content,\n        content_format: 'text/md'\n      }\n    }\n  });\n}\n\nreturn results;\n"
+        "url": "=https://api.clickup.com/api/v3/workspaces/9017833757/docs/{{ $json.id || ($json.data && $json.data.id) }}/page_listing",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1000
+            }
+          }
+        }
+      },
+      "name": "Get Doc Pages",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1380,
+        0
+      ],
+      "id": "f0a1b2c3-100a-4a00-b000-00000000000a",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ju5QMIyIYhk1qUcc",
+          "name": "ClickUp API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst createItems = $('Create ClickUp Doc').all();\nconst fmtItems = $('Format for ClickUp').all();\n\nconst results = [];\nfor (let i = 0; i < items.length; i++) {\n  const pageListingResp = items[i].json;\n  const createResp = createItems[i].json;\n\n  // Extract doc ID from create response\n  const docId = (createResp.data && createResp.data.id) || createResp.id || (createResp.doc && createResp.doc.id);\n\n  if (!docId) {\n    console.error(\n      '[Build Page Payload] No doc ID in create response for item ' + i +\n      ': keys=' + Object.keys(createResp).join(',') +\n      ' snippet=' + JSON.stringify(createResp).substring(0, 300)\n    );\n    continue;\n  }\n\n  // Extract default page ID from page listing\n  // page_listing returns an array of pages; first element is the auto-created default page\n  const pages = pageListingResp.pages || pageListingResp || [];\n  const pageArray = Array.isArray(pages) ? pages : [];\n\n  if (pageArray.length === 0) {\n    console.error(\n      '[Build Page Payload] No pages found for doc ' + docId +\n      ': snippet=' + JSON.stringify(pageListingResp).substring(0, 300)\n    );\n    continue;\n  }\n\n  const defaultPage = pageArray[0];\n  const pageId = defaultPage.id;\n\n  const content = fmtItems[i].json.payload.content;\n  const docName = fmtItems[i].json.payload.name;\n\n  results.push({\n    json: {\n      docId: docId,\n      pageId: pageId,\n      pagePayload: {\n        name: docName,\n        content: content,\n        content_format: 'text/md',\n        content_edit_mode: 'replace'\n      }\n    }\n  });\n}\n\nreturn results;\n"
       },
       "name": "Build Page Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1380,
+        1620,
         0
       ],
       "id": "f0a1b2c3-1008-4a00-b000-000000000008"
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "=https://api.clickup.com/api/v3/workspaces/9017833757/docs/{{ $json.docId }}/pages",
+        "method": "PUT",
+        "url": "=https://api.clickup.com/api/v3/workspaces/9017833757/docs/{{ $json.docId }}/pages/{{ $json.pageId }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -220,11 +250,11 @@
           }
         }
       },
-      "name": "Create Page Content",
+      "name": "Edit Default Page",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1620,
+        1860,
         0
       ],
       "id": "f0a1b2c3-1009-4a00-b000-000000000009",
@@ -308,6 +338,17 @@
       "main": [
         [
           {
+            "node": "Get Doc Pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Doc Pages": {
+      "main": [
+        [
+          {
             "node": "Build Page Payload",
             "type": "main",
             "index": 0
@@ -319,7 +360,7 @@
       "main": [
         [
           {
-            "node": "Create Page Content",
+            "node": "Edit Default Page",
             "type": "main",
             "index": 0
           }
