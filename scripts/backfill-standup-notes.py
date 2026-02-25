@@ -267,7 +267,9 @@ def get_doc_pages(
     )
     resp.raise_for_status()
     data = resp.json()
-    return data.get("pages", data if isinstance(data, list) else [])
+    if isinstance(data, list):
+        return data
+    return data.get("pages", [])
 
 
 def edit_default_page(
@@ -277,7 +279,7 @@ def edit_default_page(
     page_id: str,
     name: str,
     content: str,
-) -> dict:
+) -> None:
     """Edit the default page of a ClickUp Doc via PUT.
 
     ClickUp auto-creates a blank default page when a doc is created.
@@ -303,7 +305,6 @@ def edit_default_page(
         timeout=30,
     )
     resp.raise_for_status()
-    return resp.json()
 
 
 # ---------------------------------------------------------------------------

@@ -101,7 +101,9 @@ def get_doc_pages(token: str, doc_id: str) -> list[dict]:
     resp = requests.get(url, headers=api_headers(token), timeout=30)
     resp.raise_for_status()
     data = resp.json()
-    return data.get("pages", data if isinstance(data, list) else [])
+    if isinstance(data, list):
+        return data
+    return data.get("pages", [])
 
 
 def get_page_content(token: str, doc_id: str, page_id: str) -> dict:
@@ -112,7 +114,7 @@ def get_page_content(token: str, doc_id: str, page_id: str) -> dict:
     return resp.json()
 
 
-def edit_page(token: str, doc_id: str, page_id: str, name: str, content: str) -> dict:
+def edit_page(token: str, doc_id: str, page_id: str, name: str, content: str) -> None:
     """Edit a page's content via PUT."""
     url = f"{CLICKUP_BASE}/docs/{doc_id}/pages/{page_id}"
     payload = {
@@ -123,13 +125,18 @@ def edit_page(token: str, doc_id: str, page_id: str, name: str, content: str) ->
     }
     resp = requests.put(url, headers=api_headers(token), json=payload, timeout=30)
     resp.raise_for_status()
-    return resp.json()
 
 
-def delete_page(token: str, doc_id: str, page_id: str) -> None:
-    """Delete a page from a doc."""
+def clear_page(token: str, doc_id: str, page_id: str) -> None:
+    """Clear a page's content (ClickUp Pages API does not support DELETE)."""
     url = f"{CLICKUP_BASE}/docs/{doc_id}/pages/{page_id}"
-    resp = requests.delete(url, headers=api_headers(token), timeout=30)
+    payload = {
+        "name": "(duplicate - see page 1)",
+        "content": " ",
+        "content_format": "text/md",
+        "content_edit_mode": "replace",
+    }
+    resp = requests.put(url, headers=api_headers(token), json=payload, timeout=30)
     resp.raise_for_status()
 
 
@@ -234,7 +241,7 @@ def main() -> None:
             print(f"  [{doc_name}] Page 1 blank, page 2 has content ({len(page2_content)} chars)")
 
             if args.dry_run:
-                print(f"    DRY RUN: Would copy page 2 → page 1, then delete page 2")
+                print(f"    DRY RUN: Would copy page 2 → page 1, then clear page 2")
                 fixed += 1
                 continue
 
@@ -243,10 +250,10 @@ def main() -> None:
             edit_page(token, doc_id, page1_id, page2_name, page2_content)
             print(f"    Copied content to page 1 ({page1_id})")
 
-            # Delete page 2
+            # Clear page 2 (ClickUp doesn't support DELETE on pages)
             time.sleep(RATE_LIMIT_DELAY)
-            delete_page(token, doc_id, page2_id)
-            print(f"    Deleted page 2 ({page2_id})")
+            clear_page(token, doc_id, page2_id)
+            print(f"    Cleared page 2 ({page2_id})")
 
             fixed += 1
 
